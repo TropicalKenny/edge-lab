@@ -109,7 +109,7 @@ class SecuritySnapshot:
     metadata_mutable: bool | None
     malicious_creator: bool | None
     top10_holder_pct: Decimal | None
-    transfer_fee_bps: Decimal | None
+    transfer_fee_rate: Decimal | None
     trusted_token: bool | None
     raw: dict[str, Any]
     captured_at: datetime
@@ -313,7 +313,6 @@ class DexScreenerClient:
         tx1 = (pair.get("txns") or {}).get("h1") or {}
         vol = pair.get("volume") or {}
         change = pair.get("priceChange") or {}
-        base = pair.get("baseToken") or {}
         quote_token = pair.get("quoteToken") or {}
         return DexSnapshot(
             mint=mint,
@@ -395,7 +394,7 @@ class GoPlusSolanaClient:
             metadata_mutable=status("metadata_mutable"),
             malicious_creator=malicious_creator,
             top10_holder_pct=top10,
-            transfer_fee_bps=_d(current_fee.get("fee_rate"), None),
+            transfer_fee_rate=_d(current_fee.get("fee_rate"), None),
             trusted_token=True if row.get("trusted_token") in ("1", 1, True) else False if row.get("trusted_token") in ("0", 0, False) else None,
             raw=row,
             captured_at=datetime.now(timezone.utc),
