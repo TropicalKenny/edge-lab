@@ -83,7 +83,16 @@ class ExperimentService:
 @dataclass
 class ComponentHealth: healthy:bool; detail:str='ok'; checked_at:datetime=field(default_factory=lambda:datetime.now(timezone.utc))
 class HealthRegistry:
-    def __init__(self): self.c={'api':ComponentHealth(True),'risk':ComponentHealth(True),'accounting':ComponentHealth(True),'signer':ComponentHealth(True,'disabled-by-design')}
+    def __init__(self): self.c={'api':ComponentHealth(True),'risk':ComponentHealth(True),'accounting':ComponentHealth(True),'market_data':ComponentHealth(False,'no-live-collector'),'reconciliation':ComponentHealth(False,'not-wired'),'signer':ComponentHealth(True,'disabled-by-design')}
+    def set(self, component:str, healthy:bool, detail:str='ok'):
+        self.c[component]=ComponentHealth(healthy,detail)
+    def dependency_health(self):
+        return DependencyHealth(
+            risk_db=self.c.get('risk',ComponentHealth(False,'missing')).healthy,
+            market_data=self.c.get('market_data',ComponentHealth(False,'missing')).healthy,
+            accounting=self.c.get('accounting',ComponentHealth(False,'missing')).healthy,
+            reconciliation=self.c.get('reconciliation',ComponentHealth(False,'missing')).healthy,
+        )
     def snapshot(self):
         cs={k:{'healthy':v.healthy,'detail':v.detail,'checked_at':v.checked_at.isoformat()} for k,v in self.c.items()}; return {'healthy':all(v.healthy for v in self.c.values()),'components':cs}
 @dataclass(frozen=True)
