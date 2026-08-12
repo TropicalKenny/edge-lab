@@ -42,6 +42,14 @@ future user's fee tier; live/shadow evaluation must later source the applicable 
 - All real-money status gates remain RED.
 - API endpoints are observational/paper-only.
 
+## Known Milestone 2 limitation
+
+`HealthRegistry` is currently process-local. The API process and the collector process do not yet
+share a liveness heartbeat through PostgreSQL or Redis. This is intentionally acceptable while the
+system is research/paper-only: it biases the API risk boundary toward **fail closed** rather than
+trusting collector health it cannot prove. A durable shared heartbeat/reconciliation state is a
+required prerequisite before any future live-capital mode.
+
 ## Next after Milestone 2
 
 Before a funding strategy can be evaluated seriously:
