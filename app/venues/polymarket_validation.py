@@ -41,8 +41,10 @@ def apply_clob_market_info(market: MarketContext, info: dict[str, Any]) -> Marke
     if None not in gamma_tokens and gamma_tokens != clob_tokens:
         raise PolymarketPublicError("Gamma/CLOB token IDs disagree")
     if market.fee_schedule is not None:
-        if market.fee_schedule.rate != schedule.rate or market.fee_schedule.exponent != schedule.exponent:
-            raise PolymarketPublicError("Gamma/CLOB fee schedules disagree")
+        if market.fee_schedule.rate != schedule.rate:
+            raise PolymarketPublicError("Gamma/CLOB fee rates disagree")
+        if schedule.rate > 0 and market.fee_schedule.exponent != schedule.exponent:
+            raise PolymarketPublicError("Gamma/CLOB fee exponents disagree")
     if "nr" in info and bool(info["nr"]) != market.neg_risk:
         raise PolymarketPublicError("Gamma/CLOB NegRisk flags disagree")
 
