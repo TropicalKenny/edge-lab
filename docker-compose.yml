@@ -19,19 +19,43 @@ services:
     volumes:
       - redis_data:/data
 
+  migrate:
+    build: .
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://edge:edge@postgres:5432/edge
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   api:
     build: .
     environment:
       DATABASE_URL: postgresql+psycopg://edge:edge@postgres:5432/edge
       REDIS_URL: redis://redis:6379/0
       SIGNER_ENABLED: "false"
+      HYPERLIQUID_NETWORK: mainnet
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       redis:
         condition: service_started
     ports:
       - "8000:8000"
+
+  hyperliquid-collector:
+    build: .
+    command: ["python", "-m", "app.workers.hyperliquid_collector"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://edge:edge@postgres:5432/edge
+      REDIS_URL: redis://redis:6379/0
+      SIGNER_ENABLED: "false"
+      HYPERLIQUID_NETWORK: mainnet
+      HYPERLIQUID_MARKET_POLL_SECONDS: "60"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
 
 volumes:
   postgres_data:

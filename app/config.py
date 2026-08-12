@@ -15,6 +15,11 @@ class Settings(BaseSettings):
     risk_halve_at_drawdown_pct: float = 0.10
     risk_freeze_at_drawdown_pct: float = 0.15
     risk_max_market_data_age_seconds: int = 5
+    hyperliquid_network: str = 'mainnet'
+    hyperliquid_timeout_seconds: float = 10.0
+    hyperliquid_market_poll_seconds: int = 60
+    hyperliquid_funding_poll_seconds: int = 3600
+    hyperliquid_funding_coins: str = 'BTC,ETH,SOL'
 
 @lru_cache
 def get_settings() -> Settings:

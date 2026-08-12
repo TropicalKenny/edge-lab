@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "edge-lab"
-version = "0.1.0"
+version = "0.2.0"
 description = "Multi-strategy quantitative research core with fail-closed risk and realistic paper execution."
 requires-python = ">=3.12"
 dependencies = [
@@ -17,6 +17,8 @@ dependencies = [
   "psycopg[binary]>=3.2,<4",
   "redis>=5,<7",
   "prometheus-client>=0.21,<1",
+  "httpx>=0.28,<1",
+  "websockets>=14,<16",
 ]
 
 [project.optional-dependencies]

@@ -3,6 +3,7 @@ from alembic import context
 from sqlalchemy import engine_from_config, pool
 from app.config import get_settings
 from app.models import Base
+import app.venues.hyperliquid_models  # register extension tables in Base.metadata
 config=context.config; config.set_main_option('sqlalchemy.url',get_settings().database_url)
 if config.config_file_name: fileConfig(config.config_file_name)
 target_metadata=Base.metadata
