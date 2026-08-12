@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 import httpx
+import pytest
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
@@ -13,6 +14,7 @@ from app.services import HealthRegistry
 from app.venues.polymarket import (
     FeeSchedule,
     PolymarketPublicClient,
+    PolymarketPublicError,
     StructuralArbitrageAnalyzer,
     parse_book,
     parse_event,
@@ -24,6 +26,7 @@ from app.venues.polymarket_models import (
     PolymarketMarketSnapshot,
     PolymarketStructuralOpportunitySnapshot,
 )
+from app.venues.polymarket_validation import apply_clob_market_info
 
 NOW = datetime(2026, 8, 12, 22, 0, tzinfo=timezone.utc)
 
@@ -65,6 +68,16 @@ def market_row(
     if group_item_title is not None:
         row["groupItemTitle"] = group_item_title
     return row
+
+
+def clob_info(*, yes="yes1", no="no1", rate="0", exponent="1", neg_risk=False):
+    return {
+        "t": [{"t": yes, "o": "Yes"}, {"t": no, "o": "No"}],
+        "mts": "0.01",
+        "mos": "1",
+        "fd": {"r": rate, "e": exponent, "to": True},
+        "nr": neg_risk,
+    }
 
 
 def book_row(token, condition, asks, *, when=NOW, neg_risk=False):
@@ -141,6 +154,22 @@ def test_stale_book_fails_closed():
     assert opportunity is None and "STALE_BOOK" in reasons
 
 
+def test_clob_metadata_crosscheck_rejects_token_or_fee_disagreement():
+    market = parse_market(
+        market_row(
+            fees_enabled=True,
+            fee_schedule={"rate": "0.02", "exponent": "2", "takerOnly": True},
+        ),
+        captured_at=NOW,
+    )
+    validated = apply_clob_market_info(market, clob_info(rate="0.02", exponent="2"))
+    assert validated.yes_token_id == "yes1" and validated.fee_schedule.rate == Decimal("0.02")
+    with pytest.raises(PolymarketPublicError):
+        apply_clob_market_info(market, clob_info(yes="different", rate="0.02", exponent="2"))
+    with pytest.raises(PolymarketPublicError):
+        apply_clob_market_info(market, clob_info(rate="0.03", exponent="2"))
+
+
 def make_negrisk_event(*, augmented=False, other=False):
     markets = []
     for i in range(3):
@@ -210,7 +239,7 @@ def test_public_client_has_no_order_surface_and_uses_public_endpoints():
 
     async def clob_handler(request: httpx.Request):
         seen.append(str(request.url))
-        return httpx.Response(200, json={"t": [{"t": "yes", "o": "Yes"}], "mts": 0.01, "mos": 1, "fd": {"r": 0, "e": 1, "to": True}})
+        return httpx.Response(200, json=clob_info())
 
     async def run():
         async with PolymarketPublicClient(
@@ -240,6 +269,8 @@ def test_full_structural_scan_persists_reproducible_snapshot():
         return httpx.Response(404)
 
     async def clob_handler(request: httpx.Request):
+        if request.url.path == "/clob-markets/c1":
+            return httpx.Response(200, json=clob_info())
         if request.url.path == "/books":
             return httpx.Response(200, json=[yes_book, no_book])
         return httpx.Response(404)
