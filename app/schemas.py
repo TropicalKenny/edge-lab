@@ -11,7 +11,7 @@ class DependencyHealth(BaseModel):
     risk_db:bool=True; market_data:bool=True; accounting:bool=True; reconciliation:bool=True
     @property
     def healthy(self): return self.risk_db and self.market_data and self.accounting and self.reconciliation
-class RiskEvaluationRequest(BaseModel): proposal:TradeProposal; portfolio:PortfolioState; health:DependencyHealth=Field(default_factory=DependencyHealth)
+class RiskEvaluationRequest(BaseModel): proposal:TradeProposal; portfolio:PortfolioState
 class RiskEvaluationResult(BaseModel): approved:bool; requested_notional:Decimal; approved_notional:Decimal; portfolio_risk_pct:Decimal; risk_multiplier:Decimal; reasons:list[str]
 class BookLevel(BaseModel): price:Decimal=Field(gt=0); quantity:Decimal=Field(gt=0)
 class PaperOrderRequest(BaseModel):
