@@ -50,7 +50,7 @@ def upgrade() -> None:
         sa.Column("mintable", sa.Boolean(), nullable=True), sa.Column("freezable", sa.Boolean(), nullable=True),
         sa.Column("non_transferable", sa.Boolean(), nullable=True), sa.Column("metadata_mutable", sa.Boolean(), nullable=True),
         sa.Column("malicious_creator", sa.Boolean(), nullable=True), sa.Column("top10_holder_pct", sa.Numeric(20,8), nullable=True),
-        sa.Column("transfer_fee_bps", sa.Numeric(20,8), nullable=True), sa.Column("trusted_token", sa.Boolean(), nullable=True),
+        sa.Column("transfer_fee_rate", sa.Numeric(20,8), nullable=True), sa.Column("trusted_token", sa.Boolean(), nullable=True),
         sa.Column("raw_json", sa.Text(), nullable=False), sa.Column("captured_at", sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint("id"),
     )
@@ -84,7 +84,7 @@ def upgrade() -> None:
         sa.Column("liquidity_to_mcap", sa.Numeric(20,10), nullable=True), sa.Column("price_change_5m", sa.Numeric(20,8), nullable=True),
         sa.Column("price_change_1h", sa.Numeric(20,8), nullable=True), sa.Column("mintable", sa.Boolean(), nullable=True),
         sa.Column("freezable", sa.Boolean(), nullable=True), sa.Column("malicious_creator", sa.Boolean(), nullable=True),
-        sa.Column("top10_holder_pct", sa.Numeric(20,8), nullable=True), sa.Column("transfer_fee_bps", sa.Numeric(20,8), nullable=True),
+        sa.Column("top10_holder_pct", sa.Numeric(20,8), nullable=True), sa.Column("transfer_fee_rate", sa.Numeric(20,8), nullable=True),
         sa.Column("exit_quote_usd", sa.Numeric(28,10), nullable=True), sa.Column("exit_price_impact_pct", sa.Numeric(20,10), nullable=True),
         sa.Column("missing_fields_json", sa.Text(), nullable=False), sa.Column("captured_at", sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint("id"),
