@@ -145,17 +145,34 @@ class HyperliquidResearchService:
             raise ValueError("hours must be between 1 and 2160")
         now = now or datetime.now(timezone.utc)
         start = now - timedelta(hours=hours)
-        payload = await self.client.funding_history(
-            coin.upper(),
-            int(start.timestamp() * 1000),
-            int(now.timestamp() * 1000),
-        )
-        points = parse_funding_history(payload)
+        end_ms = int(now.timestamp() * 1000)
+        cursor_ms = int(start.timestamp() * 1000)
+        by_time: dict[tuple[str, datetime], FundingRatePoint] = {}
+        pages = 0
+        while cursor_ms <= end_ms:
+            payload = await self.client.funding_history(coin.upper(), cursor_ms, end_ms)
+            if not isinstance(payload, list):
+                raise RuntimeError("unexpected Hyperliquid funding-history response")
+            points = parse_funding_history(payload)
+            for point in points:
+                by_time[(point.coin, point.time)] = point
+            if not payload or len(payload) < 500:
+                break
+            if not points:
+                raise RuntimeError("funding-history page contained no parseable timestamps")
+            last_ms = max(int(point.time.timestamp() * 1000) for point in points)
+            if last_ms < cursor_ms:
+                raise RuntimeError("funding-history pagination did not advance")
+            cursor_ms = last_ms + 1
+            pages += 1
+            if pages >= 10:
+                raise RuntimeError("funding-history pagination exceeded safety page limit")
+        result = sorted(by_time.values(), key=lambda point: point.time)
         if persist:
             if db is None:
                 raise RuntimeError("database session required when persist=True")
-            HyperliquidSnapshotRepository.save_funding(db, points)
-        return points
+            HyperliquidSnapshotRepository.save_funding(db, result)
+        return result
 
     async def opportunities(
         self,
