@@ -27,6 +27,10 @@ def selected(mint: str, modulo: int) -> bool:
     return int.from_bytes(digest[:8], "big") % modulo == 0
 
 
+def _aware(value: datetime) -> datetime:
+    return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+
+
 async def run_cycle() -> int:
     settings = get_settings()
     SessionLocal = get_session_factory()
@@ -53,7 +57,7 @@ async def run_cycle() -> int:
                 .order_by(SolanaForensicFeatureSnapshot.captured_at.desc())
                 .limit(1)
             )
-            if latest is not None and now - latest.captured_at < min_interval:
+            if latest is not None and now - _aware(latest.captured_at) < min_interval:
                 continue
             chosen.append(launch)
             if len(chosen) >= settings.solana_max_enrichments_per_cycle:
