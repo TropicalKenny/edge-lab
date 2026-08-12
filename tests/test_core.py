@@ -41,5 +41,21 @@ def test_signer_disabled():
     s=DisabledSigner(); assert s.status()['can_sign'] is False
     with pytest.raises(DisabledSignerError): s.sign(b'x')
 def test_api_health_signer_and_risk():
-    c=TestClient(app); assert c.get('/health').json()['healthy']; assert c.get('/signer/status').json()['can_sign'] is False
-    now=datetime.now(timezone.utc).isoformat(); payload={'proposal':{'strategy':'funding','instrument':'BTC','side':'short','correlation_bucket':'funding/carry','requested_notional':'100','planned_loss':'2','expected_edge_pct':'0.02','market_data_at':now},'portfolio':{'nav':'1500'},'health':{}}; assert c.post('/risk/evaluate',json=payload).json()['approved']
+    from app.main import health
+    c=TestClient(app); assert c.get('/health').json()['healthy'] is False; assert c.get('/signer/status').json()['can_sign'] is False
+    now=datetime.now(timezone.utc).isoformat(); payload={'proposal':{'strategy':'funding','instrument':'BTC','side':'short','correlation_bucket':'funding/carry','requested_notional':'100','planned_loss':'2','expected_edge_pct':'0.02','market_data_at':now},'portfolio':{'nav':'1500'}}
+    out=c.post('/risk/evaluate',json=payload).json(); assert out['approved'] is False and 'DEPENDENCY_DEGRADED' in out['reasons']
+    health.set('market_data',True); health.set('reconciliation',True)
+    try:
+        assert c.post('/risk/evaluate',json=payload).json()['approved']
+        payload['health']={'accounting':True}; assert c.post('/risk/evaluate',json=payload).json()['approved']
+    finally:
+        health.set('market_data',False,'no-live-collector'); health.set('reconciliation',False,'not-wired')
+def test_api_uses_server_side_dependency_health():
+    from app.main import health
+    c=TestClient(app); now=datetime.now(timezone.utc).isoformat(); payload={'proposal':{'strategy':'funding','instrument':'BTC','side':'short','correlation_bucket':'funding/carry','requested_notional':'100','planned_loss':'2','expected_edge_pct':'0.02','market_data_at':now},'portfolio':{'nav':'1500'}}
+    health.set('market_data',True); health.set('reconciliation',True); health.set('accounting',False,'test outage')
+    try:
+        out=c.post('/risk/evaluate',json=payload).json(); assert out['approved'] is False and 'DEPENDENCY_DEGRADED' in out['reasons']
+    finally:
+        health.set('accounting',True); health.set('market_data',False,'no-live-collector'); health.set('reconciliation',False,'not-wired')
