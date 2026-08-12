@@ -27,6 +27,17 @@ class Settings(BaseSettings):
     polymarket_max_shares_per_opportunity: float = 100.0
     polymarket_min_edge_bps: float = 10.0
     polymarket_max_book_age_seconds: int = 10
+    helius_api_key: str = ''
+    helius_commitment: str = 'confirmed'
+    helius_pump_program_ids: str = '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P,pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA'
+    jupiter_api_key: str = ''
+    jupiter_timeout_seconds: float = 10.0
+    dexscreener_timeout_seconds: float = 10.0
+    goplus_access_token: str = ''
+    goplus_timeout_seconds: float = 10.0
+    solana_forensic_poll_seconds: int = 30
+    solana_max_candidate_age_hours: int = 24
+    solana_quote_mint: str = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
 
 @lru_cache
 def get_settings() -> Settings:
