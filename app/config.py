@@ -27,6 +27,29 @@ class Settings(BaseSettings):
     polymarket_max_shares_per_opportunity: float = 100.0
     polymarket_min_edge_bps: float = 10.0
     polymarket_max_book_age_seconds: int = 10
+    helius_api_key: str = ''
+    helius_commitment: str = 'confirmed'
+    helius_pump_program_ids: str = '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P,pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA'
+    jupiter_api_key: str = ''
+    jupiter_timeout_seconds: float = 10.0
+    dexscreener_timeout_seconds: float = 10.0
+    goplus_access_token: str = ''
+    goplus_timeout_seconds: float = 10.0
+    solana_forensic_poll_seconds: int = 300
+    solana_max_candidate_age_hours: int = 24
+    solana_enrichment_sample_modulo: int = 50
+    solana_max_enrichments_per_cycle: int = 20
+    solana_min_enrichment_interval_minutes: int = 15
+    solana_shadow_exit_notional_usd: float = 25.0
+    solana_quote_mint: str = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
+    portfolio_min_unallocated_pct: float = 0.40
+    portfolio_global_planned_risk_pct: float = 0.02
+    portfolio_bucket_planned_risk_pct: float = 0.01
+    portfolio_max_strategy_notional_pct: float = 0.20
+    portfolio_max_venue_notional_pct: float = 0.35
+    portfolio_venue_float_buffer_pct: float = 0.10
+    treasury_min_rebalance_usd: float = 25.0
+    treasury_max_transfer_cost_pct: float = 0.005
 
 @lru_cache
 def get_settings() -> Settings:
