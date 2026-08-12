@@ -57,6 +57,21 @@ services:
         condition: service_completed_successfully
     restart: unless-stopped
 
+  polymarket-collector:
+    build: .
+    command: ["python", "-m", "app.workers.polymarket_collector"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://edge:edge@postgres:5432/edge
+      REDIS_URL: redis://redis:6379/0
+      SIGNER_ENABLED: "false"
+      POLYMARKET_SCAN_SECONDS: "60"
+      POLYMARKET_MAX_MARKETS: "50"
+      POLYMARKET_MAX_NEGRISK_EVENTS: "8"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
 volumes:
   postgres_data:
   redis_data:
