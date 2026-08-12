@@ -33,6 +33,10 @@ ZERO = Decimal("0")
 HORIZONS_MINUTES = (5, 30, 60, 360, 1440)
 
 
+def _aware(value: datetime) -> datetime:
+    return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+
+
 class SolanaResearchRepository:
     @staticmethod
     def save_launch(db: Session, event: PumpLaunchEvent) -> bool:
@@ -105,7 +109,7 @@ class ForensicFeatureBuilder:
         if exit_test_notional_usd is not None and exit_quote is None:
             missing.append("exit_shadow_quote")
 
-        age_minutes = Decimal(str((now - launch_at).total_seconds() / 60)) if launch_at else None
+        age_minutes = Decimal(str((now - _aware(launch_at)).total_seconds() / 60)) if launch_at else None
         momentum = sell_ratio = volume_accel = liquidity_ratio = None
         if dex:
             total = dex.buys_5m + dex.sells_5m
@@ -143,7 +147,7 @@ class ForensicFeatureBuilder:
             "freezable": freezable,
             "malicious_creator": security.malicious_creator if security else None,
             "top10_holder_pct": security.top10_holder_pct if security else None,
-            "transfer_fee_bps": security.transfer_fee_bps if security else None,
+            "transfer_fee_rate": security.transfer_fee_rate if security else None,
             "exit_quote_usd": exit_quote.out_usd_value if exit_quote else None,
             "exit_price_impact_pct": exit_quote.price_impact_pct if exit_quote else None,
             "missing_fields_json": json.dumps(missing, separators=(",", ":")),
@@ -245,7 +249,7 @@ class SolanaForensicService:
 
 
 class ForwardLabelService:
-    """Build labels from later snapshots; never feeds the future value back into entry-time features."""
+    """Build labels from later snapshots, anchored to the first observed entry-time DEX snapshot."""
 
     @staticmethod
     def resolve(db: Session, *, mint: str, horizons: tuple[int, ...] = HORIZONS_MINUTES) -> int:
@@ -257,18 +261,27 @@ class ForwardLabelService:
         )
         if launch is None:
             return 0
+        launch_at = _aware(launch.observed_at)
         snapshots = list(
             db.scalars(
                 select(SolanaDexSnapshot)
-                .where(SolanaDexSnapshot.mint == mint)
+                .where(
+                    SolanaDexSnapshot.mint == mint,
+                    SolanaDexSnapshot.captured_at >= launch.observed_at,
+                )
                 .order_by(SolanaDexSnapshot.captured_at.asc())
             ).all()
         )
         if not snapshots:
             return 0
         entry = snapshots[0]
+        entry_at = _aware(entry.captured_at)
+        if entry_at < launch_at:
+            return 0
         created = 0
         for horizon in horizons:
+            if horizon <= 0:
+                continue
             if db.scalar(
                 select(SolanaForwardLabel.id).where(
                     SolanaForwardLabel.mint == mint,
@@ -277,14 +290,22 @@ class ForwardLabelService:
                 )
             ):
                 continue
-            target = launch.observed_at + timedelta(minutes=horizon)
-            future = next((s for s in snapshots if s.captured_at >= target), None)
+            target = entry_at + timedelta(minutes=horizon)
+            future = next((s for s in snapshots if _aware(s.captured_at) >= target), None)
             if future is None:
                 continue
             return_pct = None
             if entry.price_usd > ZERO:
                 return_pct = ((future.price_usd - entry.price_usd) / entry.price_usd) * Decimal("100")
-            max_liq = max((s.liquidity_usd for s in snapshots if s.captured_at <= future.captured_at), default=future.liquidity_usd)
+            future_at = _aware(future.captured_at)
+            max_liq = max(
+                (
+                    s.liquidity_usd
+                    for s in snapshots
+                    if entry_at <= _aware(s.captured_at) <= future_at
+                ),
+                default=future.liquidity_usd,
+            )
             db.add(
                 SolanaForwardLabel(
                     mint=mint,
