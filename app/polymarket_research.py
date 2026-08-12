@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
@@ -29,6 +29,7 @@ from app.venues.polymarket_models import (
     PolymarketMarketSnapshot,
     PolymarketStructuralOpportunitySnapshot,
 )
+from app.venues.polymarket_validation import apply_clob_market_info
 
 
 def _json_default(value: Any):
@@ -185,6 +186,26 @@ class PolymarketResearchService:
                 break
         return found
 
+    async def _validate_markets(self, markets: list[MarketContext]) -> tuple[list[MarketContext], dict[str, int]]:
+        rejected: dict[str, int] = {}
+        semaphore = asyncio.Semaphore(10)
+
+        async def fetch(market: MarketContext):
+            async with semaphore:
+                return await self.client.get_clob_market_info(market.condition_id)
+
+        payloads = await asyncio.gather(*(fetch(market) for market in markets), return_exceptions=True)
+        validated: list[MarketContext] = []
+        for market, payload in zip(markets, payloads, strict=True):
+            if isinstance(payload, Exception) or not isinstance(payload, dict):
+                self._bump(rejected, "CLOB_MARKET_INFO_FAILED")
+                continue
+            try:
+                validated.append(apply_clob_market_info(market, payload))
+            except PolymarketPublicError:
+                self._bump(rejected, "CLOB_MARKET_METADATA_MISMATCH")
+        return validated, rejected
+
     async def fetch_books(self, token_ids: list[str]) -> tuple[dict[str, OrderBook], dict[str, int]]:
         unique = list(dict.fromkeys(token_ids))
         books: dict[str, OrderBook] = {}
@@ -208,27 +229,60 @@ class PolymarketResearchService:
             rejected["MISSING_BOOK"] = rejected.get("MISSING_BOOK", 0) + missing
         return books, rejected
 
+    def _remove_book_metadata_mismatches(
+        self,
+        markets: list[MarketContext],
+        books: dict[str, OrderBook],
+        rejected: dict[str, int],
+    ) -> None:
+        for market in markets:
+            for token_id in (market.yes_token_id, market.no_token_id):
+                if not token_id or token_id not in books:
+                    continue
+                book = books[token_id]
+                if book.condition_id != market.condition_id or book.neg_risk != market.neg_risk:
+                    books.pop(token_id, None)
+                    self._bump(rejected, "BOOK_MARKET_METADATA_MISMATCH")
+
     async def _load_negrisk_events(
         self,
         markets: list[MarketContext],
         *,
         max_events: int,
-    ) -> list[EventContext]:
+    ) -> tuple[list[EventContext], dict[str, int]]:
+        rejected: dict[str, int] = {}
         ids = list(dict.fromkeys(m.event_id for m in markets if m.neg_risk and m.event_id))[:max_events]
         if not ids:
-            return []
+            return [], rejected
         payloads = await asyncio.gather(*(self.client.get_event(str(event_id)) for event_id in ids), return_exceptions=True)
         events: list[EventContext] = []
         for payload in payloads:
             if isinstance(payload, Exception) or not isinstance(payload, dict):
+                self._bump(rejected, "EVENT_FETCH_FAILED")
+                continue
+            raw_markets = payload.get("markets")
+            if not isinstance(raw_markets, list) or len(raw_markets) < 3:
+                self._bump(rejected, "INCOMPLETE_NEG_RISK_EVENT")
                 continue
             try:
                 event = parse_event(payload)
             except PolymarketPublicError:
+                self._bump(rejected, "EVENT_PARSE_FAILED")
                 continue
-            if event.neg_risk:
-                events.append(event)
-        return events
+            if not event.neg_risk:
+                self._bump(rejected, "NOT_NEG_RISK")
+                continue
+            if len(event.markets) != len(raw_markets) or any(not market.is_tradeable_binary for market in event.markets):
+                self._bump(rejected, "INCOMPLETE_NEG_RISK_EVENT")
+                continue
+            validated, validation_rejections = await self._validate_markets(list(event.markets))
+            for key, value in validation_rejections.items():
+                rejected[key] = rejected.get(key, 0) + value
+            if len(validated) != len(event.markets):
+                self._bump(rejected, "INCOMPLETE_NEG_RISK_EVENT")
+                continue
+            events.append(replace(event, markets=tuple(validated)))
+        return events, rejected
 
     async def scan(
         self,
@@ -240,9 +294,15 @@ class PolymarketResearchService:
     ) -> StructuralScanResult:
         rejected: dict[str, int] = {}
         try:
-            markets = await self.discover_markets(max_markets=max_markets)
-            if not markets:
+            discovered = await self.discover_markets(max_markets=max_markets)
+            if not discovered:
                 raise RuntimeError("Polymarket discovery returned no tradeable binary markets")
+            markets, validation_rejections = await self._validate_markets(discovered)
+            for key, value in validation_rejections.items():
+                rejected[key] = rejected.get(key, 0) + value
+            if not markets:
+                raise RuntimeError("no Polymarket markets passed CLOB V2 metadata validation")
+
             token_ids = [
                 token
                 for market in markets
@@ -252,6 +312,7 @@ class PolymarketResearchService:
             books, book_rejections = await self.fetch_books(token_ids)
             for key, value in book_rejections.items():
                 rejected[key] = rejected.get(key, 0) + value
+            self._remove_book_metadata_mismatches(markets, books, rejected)
 
             opportunities: list[StructuralOpportunity] = []
             for market in markets:
@@ -261,8 +322,10 @@ class PolymarketResearchService:
                 for reason in reasons:
                     self._bump(rejected, reason)
 
-            events = await self._load_negrisk_events(markets, max_events=max_negrisk_events)
-            event_markets = [m for event in events for m in event.markets if m.is_tradeable_binary]
+            events, event_rejections = await self._load_negrisk_events(markets, max_events=max_negrisk_events)
+            for key, value in event_rejections.items():
+                rejected[key] = rejected.get(key, 0) + value
+            event_markets = [market for event in events for market in event.markets]
             extra_tokens = [
                 token
                 for market in event_markets
@@ -274,16 +337,19 @@ class PolymarketResearchService:
                 books.update(extra_books)
                 for key, value in extra_rejections.items():
                     rejected[key] = rejected.get(key, 0) + value
+            self._remove_book_metadata_mismatches(event_markets, books, rejected)
+
             for event in events:
-                found, event_rejections = self.analyzer.neg_risk_event(event, books)
+                found, event_scan_rejections = self.analyzer.neg_risk_event(event, books)
                 opportunities.extend(found)
-                for key, value in event_rejections.items():
+                for key, value in event_scan_rejections.items():
                     rejected[key] = rejected.get(key, 0) + value
 
             if persist:
                 if db is None:
                     raise RuntimeError("database session required when persist=True")
-                PolymarketSnapshotRepository.save_markets(db, markets)
+                all_markets = {market.market_id: market for market in [*markets, *event_markets]}
+                PolymarketSnapshotRepository.save_markets(db, list(all_markets.values()))
                 PolymarketSnapshotRepository.save_books(db, list(books.values()))
                 for event in events:
                     PolymarketSnapshotRepository.save_event(db, event)
@@ -293,7 +359,7 @@ class PolymarketResearchService:
             self.health.set(
                 "polymarket",
                 True,
-                f"public structural scan: {len(markets)} markets/{len(events)} neg-risk events/{len(opportunities)} edges",
+                f"public structural scan: {len(markets)} markets/{len(events)} complete neg-risk events/{len(opportunities)} edges",
             )
             return StructuralScanResult(
                 opportunities=tuple(sorted(opportunities, key=lambda o: o.net_profit, reverse=True)),
