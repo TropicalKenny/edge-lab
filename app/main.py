@@ -7,7 +7,7 @@ settings=get_settings(); risk=RiskService(settings); health=HealthRegistry(); si
 @app.get('/health')
 def get_health(): return health.snapshot()
 @app.post('/risk/evaluate',response_model=RiskEvaluationResult)
-def evaluate(req:RiskEvaluationRequest): return risk.evaluate(req.proposal,req.portfolio,req.health)
+def evaluate(req:RiskEvaluationRequest): return risk.evaluate(req.proposal,req.portfolio,health.dependency_health())
 @app.post('/paper/simulate',response_model=PaperExecutionResult)
 def paper(req:PaperOrderRequest): return PaperBroker.simulate(req)
 @app.get('/signer/status')
