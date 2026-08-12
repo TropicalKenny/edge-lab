@@ -20,6 +20,13 @@ class Settings(BaseSettings):
     hyperliquid_market_poll_seconds: int = 60
     hyperliquid_funding_poll_seconds: int = 3600
     hyperliquid_funding_coins: str = 'BTC,ETH,SOL'
+    polymarket_timeout_seconds: float = 10.0
+    polymarket_scan_seconds: int = 60
+    polymarket_max_markets: int = 50
+    polymarket_max_negrisk_events: int = 8
+    polymarket_max_shares_per_opportunity: float = 100.0
+    polymarket_min_edge_bps: float = 10.0
+    polymarket_max_book_age_seconds: int = 10
 
 @lru_cache
 def get_settings() -> Settings:
