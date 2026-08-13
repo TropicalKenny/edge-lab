@@ -50,6 +50,21 @@ class Settings(BaseSettings):
     portfolio_venue_float_buffer_pct: float = 0.10
     treasury_min_rebalance_usd: float = 25.0
     treasury_max_transfer_cost_pct: float = 0.005
+    evaluation_min_forward_days: int = 90
+    evaluation_min_nav_observations: int = 60
+    evaluation_min_shadow_observations: int = 30
+    evaluation_min_trades_default: int = 100
+    evaluation_min_trades_funding: int = 60
+    evaluation_min_trades_directional: int = 100
+    evaluation_min_trades_meme: int = 300
+    evaluation_min_forecasts_prediction: int = 50
+    evaluation_max_drawdown_pct: float = 0.15
+    evaluation_min_profit_factor: float = 1.30
+    evaluation_max_top3_profit_concentration: float = 0.50
+    evaluation_cost_stress_multiplier: float = 2.0
+    evaluation_min_shadow_fill_ratio: float = 0.90
+    evaluation_max_shadow_p90_price_divergence_bps: float = 50.0
+    evaluation_max_prediction_calibration_error: float = 0.10
 
 @lru_cache
 def get_settings() -> Settings:
