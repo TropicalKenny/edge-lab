@@ -49,14 +49,23 @@ def test_hosted_compose_uses_isolated_dashboard_and_no_host_ports():
     assert "GOPLUS_ACCESS_TOKEN" not in text
 
 
-def test_cloudflared_is_not_attached_to_internal_default_network():
+def test_hosted_networks_separate_tunnel_database_and_internal_api():
     text = (ROOT / "deploy" / "compose.hosted.yml").read_text()
+    postgres = _section(text, "  postgres:\n", "\n  dashboard-db-role:\n")
+    role = _section(text, "  dashboard-db-role:\n", "\n  dashboard:\n")
     dashboard = _section(text, "  dashboard:\n", "\n  cloudflared:\n")
     cloudflared = _section(text, "  cloudflared:\n", "\nnetworks:\n")
+    network_defs = text.split("\nnetworks:\n", 1)[1]
 
-    assert "networks:\n      - default\n      - dashboard_edge" in dashboard
+    assert "- default" in postgres
+    assert "- dashboard_data" in postgres
+    assert "networks:\n      - dashboard_data" in role
+    assert "networks:\n      - dashboard_data\n      - dashboard_edge" in dashboard
     assert "networks:\n      - dashboard_edge" in cloudflared
+    assert "dashboard_data" not in cloudflared
     assert "      - default" not in cloudflared
+    assert "      - default" not in dashboard
+    assert "dashboard_data:\n    internal: true" in network_defs
 
 
 def test_dashboard_db_role_is_select_only_and_password_is_not_a_psql_argument():
