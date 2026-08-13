@@ -15,6 +15,7 @@ class HyperliquidCarryPosition(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
     study_id: Mapped[str] = mapped_column(ForeignKey("forward_studies.id"), index=True)
+    trade_record_id: Mapped[str | None] = mapped_column(ForeignKey("forward_trade_records.id"), index=True)
     external_key: Mapped[str] = mapped_column(String(160))
     coin: Mapped[str] = mapped_column(String(32), index=True)
     spot_book_coin: Mapped[str] = mapped_column(String(64))
@@ -26,6 +27,8 @@ class HyperliquidCarryPosition(Base):
     target_close_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
+    entry_spot_mid: Mapped[Decimal] = mapped_column(Numeric(28, 10))
+    entry_perp_mid: Mapped[Decimal] = mapped_column(Numeric(28, 10))
     entry_spot_price: Mapped[Decimal] = mapped_column(Numeric(28, 10))
     entry_perp_price: Mapped[Decimal] = mapped_column(Numeric(28, 10))
     entry_spot_fee_usd: Mapped[Decimal] = mapped_column(Numeric(28, 10))
@@ -33,6 +36,8 @@ class HyperliquidCarryPosition(Base):
     entry_spot_slippage_usd: Mapped[Decimal] = mapped_column(Numeric(28, 10))
     entry_perp_slippage_usd: Mapped[Decimal] = mapped_column(Numeric(28, 10))
 
+    exit_spot_mid: Mapped[Decimal | None] = mapped_column(Numeric(28, 10))
+    exit_perp_mid: Mapped[Decimal | None] = mapped_column(Numeric(28, 10))
     exit_spot_price: Mapped[Decimal | None] = mapped_column(Numeric(28, 10))
     exit_perp_price: Mapped[Decimal | None] = mapped_column(Numeric(28, 10))
     funding_pnl_usd: Mapped[Decimal | None] = mapped_column(Numeric(28, 10))
