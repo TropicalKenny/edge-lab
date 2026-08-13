@@ -38,12 +38,12 @@ fi
 
 export SIGNER_ENABLED=false
 
-# Start the private research stack first. This keeps PostgreSQL/Redis private and
-# binds the API to localhost even if cloudflared is unavailable.
+# Start the private research stack first. PostgreSQL/Redis are never published and
+# the internal API remains bound to 127.0.0.1 on the VPS.
 sh deploy/start-forward.sh
 
-# The remotely-managed tunnel must already route the protected hostname to
-# http://api:8000. Cloudflare Access should be created before starting this service.
+# The Cloudflare tunnel must be remotely configured to route the protected hostname
+# to http://dashboard:8080 — never to api:8000.
 docker compose \
   --env-file "$ENV_FILE" \
   -f docker-compose.yml \
@@ -52,7 +52,7 @@ docker compose \
   -f deploy/compose.hosted.yml \
   --profile forward \
   --profile solana \
-  up -d cloudflared
+  up -d --build dashboard cloudflared
 
 docker compose \
   --env-file "$ENV_FILE" \
@@ -62,4 +62,4 @@ docker compose \
   -f deploy/compose.hosted.yml \
   --profile forward \
   --profile solana \
-  ps api cloudflared
+  ps api dashboard cloudflared
