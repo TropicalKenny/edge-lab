@@ -6,6 +6,8 @@ Dashboard V1 gives the owner a browser UI for Edge Lab while the research worker
 
 The UI is deliberately **read-only**. It displays forward-study NAV, evidence state, research P&L, trade/execution counts, incidents and recent closed paper trades. It cannot sign, submit venue orders, move funds, reach the owner vault, change strategy status, or authorize live capital.
 
+All NAV/capital/P&L values in Dashboard V1 are **simulated research values**. Each frozen forward study has its own independent simulated bankroll. The overview may add those bankrolls together for observability, but that aggregate is not a real portfolio balance, is not money in the owner vault, and is not deployable capital. Live capital is explicitly reported as `$0` in this milestone.
+
 ## Routes
 
 - `/dashboard` — responsive dashboard page.
@@ -43,20 +45,23 @@ Do not publish `/dashboard` directly on an unrestricted VPS port.
 
 ### Overview
 
-- combined forward-study NAV;
-- return versus each frozen study's starting capital;
+- aggregate **simulated** forward-study NAV;
+- return versus each independent frozen study's starting bankroll;
 - closed research P&L;
+- worst observed drawdown among the independent study NAV series;
 - active study count;
-- unresolved and data-integrity incidents;
-- NAV history chart;
+- unresolved incidents and permanent data-integrity contamination;
+- NAV history chart per study;
 - strategy study cards;
 - recent paper trades;
 - incident queue;
-- explicit signer/order/fund/vault safety state.
+- explicit live-capital `$0`, signer/order/fund/vault safety state.
+
+The aggregate simulated NAV is never presented as owner-vault balance or real portfolio NAV.
 
 ### Strategies
 
-Each frozen study shows its version, family, venue, instrument, current NAV, P&L, elapsed forward days, trade count, shadow observations and latest recommendation/reasons.
+Each frozen study shows its version, family, venue, instrument, current simulated NAV, P&L, observed drawdown, elapsed forward days, trade count, shadow observations and latest recommendation/reasons.
 
 `GREEN-1_CANDIDATE` remains evidence only. The UI cannot promote a strategy.
 
@@ -66,7 +71,7 @@ Closed records are from the normalized forward research journal. They are simula
 
 ### Incidents
 
-Unresolved incidents are displayed prominently. A study with any data-integrity incident is displayed as contaminated even if an operational incident was later marked resolved, matching the frozen-evidence policy.
+Unresolved incidents are displayed prominently. A study with **any** data-integrity incident is displayed as contaminated even if that operational incident was later marked resolved, matching the frozen-evidence policy. The aggregate API therefore exposes permanent integrity counts separately from unresolved operational incidents.
 
 ## Mobile behavior
 
@@ -74,7 +79,7 @@ The dashboard is light-first, supports an optional local dark theme, collapses n
 
 ## Safety contract
 
-The dashboard aggregate API always reports:
+The dashboard aggregate API always reports a safety object equivalent to:
 
 ```json
 {
@@ -82,9 +87,12 @@ The dashboard aggregate API always reports:
   "can_sign": false,
   "can_move_funds": false,
   "vault_accessible": false,
-  "signer_enabled": false
+  "signer_enabled": false,
+  "live_capital_usd": 0
 }
 ```
+
+It also identifies the capital scope as `independent-simulated-forward-study-bankrolls`.
 
 Dashboard V1 adds no POST/PATCH/PUT/DELETE routes under `/dashboard`.
 
