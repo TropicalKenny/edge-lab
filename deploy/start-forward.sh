@@ -9,6 +9,10 @@ if [ ! -f "$ENV_FILE" ]; then
   exit 1
 fi
 
+# A normal research launch cannot bypass signer/secret/network validation.
+# Dashboard/tunnel credentials are intentionally not required for this private stack.
+sh deploy/preflight-forward.sh --research-only
+
 set -a
 # shellcheck disable=SC1090
 . "$ENV_FILE"
