@@ -6,7 +6,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -25,6 +25,10 @@ from app.models import Strategy, StrategyVersion
 router = APIRouter(tags=["dashboard"])
 STATIC_DIR = Path(__file__).resolve().parent / "static" / "dashboard"
 ZERO = Decimal("0")
+ASSETS = {
+    "dashboard.css": ("text/css", STATIC_DIR / "dashboard.css"),
+    "dashboard.js": ("application/javascript", STATIC_DIR / "dashboard.js"),
+}
 
 
 def _aware(value: datetime | None) -> datetime | None:
@@ -131,8 +135,12 @@ def _study_payload(db: Session, study: ForwardStudy, now: datetime) -> dict[str,
                 "trade_count": evaluation.trade_count,
                 "net_pnl_usd": Decimal(evaluation.net_pnl_usd),
                 "stressed_net_pnl_usd": Decimal(evaluation.stressed_net_pnl_usd),
-                "max_drawdown_pct": Decimal(evaluation.max_drawdown_pct) if evaluation.max_drawdown_pct is not None else None,
-                "profit_factor": Decimal(evaluation.profit_factor) if evaluation.profit_factor is not None else None,
+                "max_drawdown_pct": Decimal(evaluation.max_drawdown_pct)
+                if evaluation.max_drawdown_pct is not None
+                else None,
+                "profit_factor": Decimal(evaluation.profit_factor)
+                if evaluation.profit_factor is not None
+                else None,
                 "reasons": _json(evaluation.reasons_json) or [],
             }
             if evaluation
@@ -147,6 +155,15 @@ def _study_payload(db: Session, study: ForwardStudy, now: datetime) -> dict[str,
 @router.get("/dashboard", include_in_schema=False)
 def dashboard_page():
     return FileResponse(STATIC_DIR / "index.html", media_type="text/html")
+
+
+@router.get("/dashboard/assets/{asset}", include_in_schema=False)
+def dashboard_asset(asset: str):
+    found = ASSETS.get(asset)
+    if found is None:
+        raise HTTPException(status_code=404, detail="dashboard asset not found")
+    media_type, path = found
+    return FileResponse(path, media_type=media_type)
 
 
 @router.get("/dashboard/api/summary")
@@ -185,7 +202,9 @@ def dashboard_summary(db: Session = Depends(get_db)):
             "initial_capital_usd": total_initial,
             "latest_nav_usd": total_nav,
             "net_pnl_usd": total_net_pnl,
-            "return_pct": ((total_nav - total_initial) / total_initial * Decimal("100")) if total_initial > ZERO else ZERO,
+            "return_pct": ((total_nav - total_initial) / total_initial * Decimal("100"))
+            if total_initial > ZERO
+            else ZERO,
             "closed_trades": sum(int(row["closed_trades"]) for row in study_rows),
             "execution_observations": sum(int(row["execution_observations"]) for row in study_rows),
             "unresolved_incidents": len(unresolved),
