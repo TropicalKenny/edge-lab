@@ -1,3 +1,4 @@
+import asyncio
 import json
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
@@ -7,7 +8,7 @@ from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session
 
 from app.evaluation import EvaluationPolicy
-from app.forward_models import ForwardExecutionRecord, ForwardStudy, ForwardTradeRecord
+from app.forward_models import ForwardExecutionRecord, ForwardTradeRecord
 from app.forward_research import ForwardResearchService
 from app.hyperliquid_forward import CarryRunnerConfigError, CarryStudyConfig, HyperliquidCarryForwardRunner
 from app.hyperliquid_forward_models import HyperliquidCarryPosition
@@ -100,14 +101,16 @@ def policy():
 
 def make_study(db: Session, *, now: datetime, config_overrides=None, started_hours_ago=0):
     strategy = Strategy(slug="hl-carry", name="HL Carry", status="red")
-    db.add(strategy); db.commit()
+    db.add(strategy)
+    db.commit()
     version = StrategyVersion(
         strategy_id=strategy.id,
         version="v1",
         config_json="{}",
         immutable=True,
     )
-    db.add(version); db.commit()
+    db.add(version)
+    db.commit()
     experiment = Experiment(
         strategy_version_id=version.id,
         hypothesis="Positive Hyperliquid funding can support delta-neutral carry after executable costs.",
@@ -118,7 +121,8 @@ def make_study(db: Session, *, now: datetime, config_overrides=None, started_hou
         search_space_json="{}",
         status="registered",
     )
-    db.add(experiment); db.commit()
+    db.add(experiment)
+    db.commit()
     cfg = {
         "runner": "hyperliquid_carry_v1",
         "paired_notional_usd": "100",
@@ -149,18 +153,21 @@ def make_study(db: Session, *, now: datetime, config_overrides=None, started_hou
     return study
 
 
-@pytest.mark.asyncio
-async def test_eligible_carry_opens_only_after_both_paper_and_shadow_legs_fill():
+def test_eligible_carry_opens_only_after_both_paper_and_shadow_legs_fill():
     now = datetime.now(timezone.utc)
     db = db_session()
     study = make_study(db, now=now)
     client = FakeHyperliquidClient()
     runner = HyperliquidCarryForwardRunner(client=client, health=HealthRegistry())
 
-    result = await runner.run_study_once(db, study=study, now=now)
+    result = asyncio.run(runner.run_study_once(db, study=study, now=now))
 
-    position = db.scalar(select(HyperliquidCarryPosition).where(HyperliquidCarryPosition.study_id == study.id))
-    executions = db.scalars(select(ForwardExecutionRecord).where(ForwardExecutionRecord.study_id == study.id)).all()
+    position = db.scalar(
+        select(HyperliquidCarryPosition).where(HyperliquidCarryPosition.study_id == study.id)
+    )
+    executions = db.scalars(
+        select(ForwardExecutionRecord).where(ForwardExecutionRecord.study_id == study.id)
+    ).all()
     assert result.action == "opened"
     assert position is not None and position.status == "open"
     assert position.coin == "BTC" and position.spot_book_coin == "@0"
@@ -173,21 +180,26 @@ async def test_eligible_carry_opens_only_after_both_paper_and_shadow_legs_fill()
     db.close()
 
 
-@pytest.mark.asyncio
-async def test_insufficient_depth_records_execution_quality_but_never_opens_position():
+def test_insufficient_depth_records_execution_quality_but_never_opens_position():
     now = datetime.now(timezone.utc)
     db = db_session()
     study = make_study(db, now=now)
     client = FakeHyperliquidClient(book_quantity="0.25")
     runner = HyperliquidCarryForwardRunner(client=client, health=HealthRegistry())
 
-    first = await runner.run_study_once(db, study=study, now=now)
-    second = await runner.run_study_once(db, study=study, now=now + timedelta(seconds=5))
+    first = asyncio.run(runner.run_study_once(db, study=study, now=now))
+    second = asyncio.run(runner.run_study_once(db, study=study, now=now + timedelta(seconds=5)))
 
     assert first.action == "entry_rejected"
     assert second.action == "entry_already_attempted"
-    assert db.scalar(select(HyperliquidCarryPosition).where(HyperliquidCarryPosition.study_id == study.id)) is None
-    count = db.scalar(select(func.count()).select_from(ForwardExecutionRecord).where(ForwardExecutionRecord.study_id == study.id))
+    assert db.scalar(
+        select(HyperliquidCarryPosition).where(HyperliquidCarryPosition.study_id == study.id)
+    ) is None
+    count = db.scalar(
+        select(func.count()).select_from(ForwardExecutionRecord).where(
+            ForwardExecutionRecord.study_id == study.id
+        )
+    )
     assert count == 2
     db.close()
 
@@ -201,8 +213,7 @@ def test_study_config_forbids_using_more_than_initial_capital_without_leverage()
     db.close()
 
 
-@pytest.mark.asyncio
-async def test_due_position_closes_atomically_into_forward_trade_with_settled_funding():
+def test_due_position_closes_atomically_into_forward_trade_with_settled_funding():
     now = datetime.now(timezone.utc)
     funding_time = now - timedelta(minutes=30)
     db = db_session()
@@ -235,7 +246,9 @@ async def test_due_position_closes_atomically_into_forward_trade_with_settled_fu
         entry_perp_slippage_usd=D("0.1"),
         metadata_json="{}",
     )
-    db.add(position); db.commit(); db.refresh(position)
+    db.add(position)
+    db.commit()
+    db.refresh(position)
     client = FakeHyperliquidClient(
         spot_mid="101",
         perp_mid="101",
@@ -248,7 +261,7 @@ async def test_due_position_closes_atomically_into_forward_trade_with_settled_fu
     )
     runner = HyperliquidCarryForwardRunner(client=client, health=HealthRegistry())
 
-    result = await runner.run_study_once(db, study=study, now=now)
+    result = asyncio.run(runner.run_study_once(db, study=study, now=now))
 
     db.refresh(position)
     trade = db.scalar(select(ForwardTradeRecord).where(ForwardTradeRecord.study_id == study.id))
