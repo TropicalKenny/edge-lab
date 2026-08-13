@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Dashboard V1 gives the owner a browser UI for Edge Lab while the research workers continue running on the VPS.
+Dashboard V1 gives the owner a browser UI for Edge Lab while research workers continue running on the VPS.
 
 The UI is deliberately **read-only**. It displays forward-study NAV, evidence state, research P&L, trade/execution counts, incidents and recent closed paper trades. It cannot sign, submit venue orders, move funds, reach the owner vault, change strategy status, or authorize live capital.
 
@@ -17,102 +17,101 @@ No third-party CDN or browser analytics dependency is required.
 
 ## Hosting model
 
-The FastAPI application remains on the VPS. The dashboard is served by the same application process, so there is no separate frontend server or Node runtime in V1.
-
-Recommended exposure path:
+The research API and the hosted dashboard are separate ASGI surfaces.
 
 ```text
 Owner browser
   -> Cloudflare Access authentication
   -> Cloudflare Tunnel
-  -> private Docker service: http://api:8000
-  -> /dashboard
+  -> dashboard-only service: http://dashboard:8080
+  -> edge_dashboard PostgreSQL role (SELECT-only)
+
+VPS-only
+  -> internal API: 127.0.0.1:8000
+  -> PostgreSQL / Redis / workers: no public ports
 ```
 
-PostgreSQL, Redis, research workers and future signer services remain private. The hardened forward overlay publishes the API to the VPS host only at `127.0.0.1:8000`; PostgreSQL and Redis publish no host ports. The `cloudflared` container reaches the API over the private Compose network and itself publishes no host port.
+`app.dashboard_server` mounts only Dashboard V1 plus `/healthz`. It does not mount signer, risk, venue refresh/scan, research-ingestion, portfolio mutation, treasury, or internal operations routes.
 
-This means the VPS does not need a public inbound dashboard port. The browser-facing hostname terminates at Cloudflare and the tunnel is outbound from the VPS.
+The dashboard receives a dedicated PostgreSQL login named `edge_dashboard`. The hosting bootstrap grants it CONNECT, schema USAGE and SELECT only, including default SELECT privileges for future tables. It never receives the main `edge` database credential.
+
+The `cloudflared` container shares only the isolated `dashboard_edge` network with the dashboard service. Do not point the tunnel at `api:8000`.
 
 ## Cloudflare setup order — important
 
-**Create the Cloudflare Access application before publishing the tunnel hostname.** The public hostname must not spend an interval exposed without the intended Access policy.
+**Create the Cloudflare Access application before publishing the tunnel hostname.** The public hostname must never spend an interval exposed without the intended Access policy.
 
-A recommended production setup is:
+Recommended setup:
 
-1. In Cloudflare Zero Trust, create a **Self-hosted** Access application for the intended dashboard hostname, for example `edge.example.com`.
-2. Add an **Allow** policy restricted to the owner's identity/email or approved identity-provider group. Do not use an Allow Everyone policy.
-3. Enable the identity-provider/MFA requirements you want for owner access.
+1. In Cloudflare Zero Trust, create a **Self-hosted** Access application for the dashboard hostname, for example `edge.example.com`.
+2. Add an **owner-only Allow policy** restricted to the owner's identity/email or approved identity-provider group. Do not use Allow Everyone.
+3. Require the identity-provider/MFA controls you want for owner access.
 4. Create a remotely managed Cloudflare Tunnel for the Edge Lab VPS.
-5. In the tunnel's Published Application/Public Hostname configuration, publish the same hostname and set its service/origin URL to **`http://api:8000`**. This works because `cloudflared` and `api` share the private Docker Compose network.
-6. Enable Cloudflare's **Protect with Access** option for the published application so the tunnel validates the Access token before forwarding the request.
-7. Copy only the generated **Tunnel token** to `deploy/.env.forward` as `CLOUDFLARE_TUNNEL_TOKEN`. The token is a secret. Never commit the real `.env.forward` file.
-8. Start the research stack, then start the tunnel:
+5. Publish the same hostname with origin URL **`http://dashboard:8080`**.
+6. **Do not point the tunnel at `api:8000`.**
+7. Enable **Protect with Access** for the published application when available so the tunnel validates the Access token before forwarding.
+8. Copy only the generated Tunnel token into uncommitted `deploy/.env.forward` as `CLOUDFLARE_TUNNEL_TOKEN`.
+9. Create a separate random `DASHBOARD_DB_PASSWORD` of at least 24 URL-safe characters. It must not equal `POSTGRES_PASSWORD`.
+10. Start the private research stack, then the dashboard tunnel:
 
 ```sh
 sh deploy/start-forward.sh
 sh deploy/start-dashboard-tunnel.sh
 ```
 
-9. Open `https://edge.example.com/dashboard` and confirm Cloudflare Access authentication appears before Edge Lab.
-10. From outside the VPS, verify that PostgreSQL, Redis and port 8000 are not publicly reachable. The host-side Edge Lab API should remain loopback-only.
+11. Open `https://edge.example.com/dashboard` and confirm Cloudflare Access appears before Edge Lab.
+12. Verify externally that PostgreSQL, Redis and port 8000 are not publicly reachable.
 
-The hostname is intentionally **not hard-coded in the repository**. Changing domains later should be a Cloudflare control-plane change, not an application rebuild.
+The hostname is intentionally not hard-coded in the repository. Domain changes belong in Cloudflare's control plane.
 
-## Tunnel token handling
+## Tunnel and database secret handling
 
-`deploy/compose.dashboard-tunnel.yml` injects the remotely managed tunnel credential through the `TUNNEL_TOKEN` environment variable. The token is not appended to the process command and the tunnel container has no host port mapping.
+`deploy/compose.dashboard-tunnel.yml` passes the remotely managed tunnel credential through `TUNNEL_TOKEN`; it is not placed on the `cloudflared` command line.
 
 `deploy/start-dashboard-tunnel.sh` refuses to start when:
 
 - `deploy/.env.forward` is missing;
-- `CLOUDFLARE_TUNNEL_TOKEN` is empty;
-- the token contains an obvious example placeholder; or
+- the tunnel token is empty or an obvious placeholder;
+- `DASHBOARD_DB_PASSWORD` is missing, too short, unsafe for the connection URL, or equals the PostgreSQL admin password; or
 - `SIGNER_ENABLED` is anything other than `false`.
 
-The launcher always exports `SIGNER_ENABLED=false` before starting the tunnel service.
-
-## Authentication boundary
-
-Dashboard V1 does not implement an application password. Production Internet access is gated by Cloudflare Access before the request reaches Edge Lab. The first deployment should use an owner-only Allow policy.
-
-Do not publish `/dashboard` directly on an unrestricted VPS port. Do not configure the tunnel hostname without the Access application/policy in place.
+The launcher always exports `SIGNER_ENABLED=false`.
 
 ## UI information architecture
 
 ### Overview
 
 - combined forward-study NAV;
-- return versus each frozen study's starting capital;
+- return versus frozen starting capital;
 - closed research P&L;
 - active study count;
-- unresolved and data-integrity incidents;
-- NAV history chart;
+- unresolved/data-integrity incidents;
+- NAV history;
 - strategy study cards;
 - recent paper trades;
-- incident queue;
 - explicit signer/order/fund/vault safety state.
 
 ### Strategies
 
-Each frozen study shows its version, family, venue, instrument, current NAV, P&L, elapsed forward days, trade count, shadow observations and latest recommendation/reasons.
+Each frozen study shows version, family, venue, instrument, current NAV, P&L, elapsed forward days, trade count, shadow observations and latest recommendation/reasons.
 
 `GREEN-1_CANDIDATE` remains evidence only. The UI cannot promote a strategy.
 
 ### Trades
 
-Closed records are from the normalized forward research journal. They are simulated/shadow evidence, not live fills.
+Closed records come from the normalized forward research journal. They are simulated/shadow evidence, not live fills.
 
 ### Incidents
 
-Unresolved incidents are displayed prominently. A study with any data-integrity incident is displayed as contaminated even if an operational incident was later marked resolved, matching the frozen-evidence policy.
+Unresolved incidents are prominent. A study with any data-integrity incident remains contaminated even if an operational incident is later resolved.
 
 ## Mobile behavior
 
-The dashboard is light-first, supports an optional local dark theme, collapses navigation to a fixed bottom bar on phones, uses horizontal scrolling only for dense trade tables, and has no dependency on hover-only interactions.
+The dashboard is light-first, supports a local dark theme, collapses navigation to a fixed bottom bar on phones, uses horizontal scrolling only for dense tables, and has no hover-only dependency.
 
 ## Safety contract
 
-The dashboard aggregate API always reports:
+The dashboard aggregate API reports:
 
 ```json
 {
@@ -126,8 +125,8 @@ The dashboard aggregate API always reports:
 
 Dashboard V1 adds no POST/PATCH/PUT/DELETE routes under `/dashboard`.
 
-The Cloudflare hosting layer changes only how an authenticated owner reaches that read-only interface. It does not grant the dashboard, `cloudflared`, or Cloudflare access to a wallet/private key, the owner vault, a venue signer, or a fund-transfer function.
+The Cloudflare hosting layer changes only how the authenticated owner reaches the read-only surface. It grants neither Cloudflare nor the dashboard access to a wallet/private key, owner vault, venue signer, or fund-transfer function.
 
 ## Next UI milestone
 
-After V1 runs against real forward data on the VPS, add safe owner operations in a separate reviewed milestone. Candidate controls are pause/freeze research and incident acknowledgement. Treasury approval, live-order control and any signer-related action remain separate security projects and are not implied by this dashboard.
+After V1 runs against real forward data, safe owner operations can be added in a separate reviewed milestone. Candidates are pause/freeze research and incident acknowledgement. Treasury approval, live-order control and signer actions remain separate security projects.
