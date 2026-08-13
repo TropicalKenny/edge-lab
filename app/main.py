@@ -18,10 +18,11 @@ from app.venues.polymarket import PolymarketPublicClient, StructuralArbitrageAna
 from app.venues.solana import DexScreenerClient, GoPlusSolanaClient, JupiterShadowClient
 from app.venues.solana_asset import HeliusAssetClient
 from app.venues.solana_models import SolanaLaunchEvent
+from app.version import APP_VERSION
 
 app = FastAPI(
     title="Edge Lab",
-    version="0.7.0",
+    version=APP_VERSION,
     description="Quant research core. Live signing and venue order submission are disabled.",
 )
 settings = get_settings()
