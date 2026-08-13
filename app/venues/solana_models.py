@@ -118,6 +118,8 @@ class SolanaForwardLabel(Base):
     mint: Mapped[str] = mapped_column(String(64), index=True)
     launch_signature: Mapped[str] = mapped_column(String(100), index=True)
     horizon_minutes: Mapped[int] = mapped_column(Integer, index=True)
+    entry_observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    observed_horizon_minutes: Mapped[Decimal] = mapped_column(Numeric(20, 6))
     entry_price_usd: Mapped[Decimal | None] = mapped_column(Numeric(28, 12))
     future_price_usd: Mapped[Decimal | None] = mapped_column(Numeric(28, 12))
     return_pct: Mapped[Decimal | None] = mapped_column(Numeric(20, 8))
