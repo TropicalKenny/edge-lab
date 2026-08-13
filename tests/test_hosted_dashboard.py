@@ -8,52 +8,99 @@ from app.dashboard_server import app
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def _section(text: str, start: str, end: str) -> str:
+    return text.split(start, 1)[1].split(end, 1)[0]
+
+
 def test_dashboard_server_exposes_only_dashboard_surface():
     client = TestClient(app)
-    assert client.get('/healthz').status_code == 200
-    assert client.get('/dashboard').status_code == 200
-    assert client.get('/signer/status').status_code == 404
-    assert client.get('/venues/hyperliquid/status').status_code == 404
-    assert client.post('/risk/evaluate', json={}).status_code == 404
-    assert client.post('/venues/polymarket/scan').status_code == 404
+    assert client.get("/healthz").status_code == 200
+    assert client.get("/dashboard").status_code == 200
+    assert client.get("/signer/status").status_code == 404
+    assert client.get("/venues/hyperliquid/status").status_code == 404
+    assert client.post("/risk/evaluate", json={}).status_code == 404
+    assert client.post("/venues/polymarket/scan").status_code == 404
 
 
-def test_hosted_compose_uses_isolated_dashboard_readonly_role_and_no_host_port():
-    text = (ROOT / 'deploy' / 'compose.hosted.yml').read_text()
-    assert 'dashboard-db-role:' in text
-    assert 'CREATE ROLE edge_dashboard LOGIN PASSWORD' in text
-    assert 'GRANT SELECT ON ALL TABLES IN SCHEMA public TO edge_dashboard' in text
-    assert 'ALTER DEFAULT PRIVILEGES FOR ROLE edge' in text
-    assert 'postgresql+psycopg://edge_dashboard:${DASHBOARD_DB_PASSWORD}@postgres:5432/edge' in text
-    assert 'app.dashboard_server:app' in text
-    assert 'SIGNER_ENABLED: "false"' in text
-    assert 'cloudflared:' in text
-    assert 'TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?set CLOUDFLARE_TUNNEL_TOKEN}' in text
-    assert text.count('ports: []') >= 2
-    assert 'dashboard_edge:' in text
-    assert 'cap_drop:' in text
-    assert 'no-new-privileges:true' in text
-    assert 'JUPITER_API_KEY' not in text
-    assert 'HELIUS_API_KEY' not in text
-    assert 'GOPLUS_ACCESS_TOKEN' not in text
+def test_hosted_compose_uses_isolated_dashboard_and_no_host_ports():
+    text = (ROOT / "deploy" / "compose.hosted.yml").read_text()
+    dashboard = _section(text, "  dashboard:\n", "\n  cloudflared:\n")
+    cloudflared = _section(text, "  cloudflared:\n", "\nnetworks:\n")
+
+    assert "app.dashboard_server:app" in dashboard
+    assert 'SIGNER_ENABLED: "false"' in dashboard
+    assert "postgresql+psycopg://edge_dashboard:${DASHBOARD_DB_PASSWORD}@postgres:5432/edge" in dashboard
+    assert "ports: []" in dashboard
+    assert "cap_drop:\n      - ALL" in dashboard
+    assert "no-new-privileges:true" in dashboard
+
+    assert "cloudflare/cloudflared:2026.7.3" in cloudflared
+    assert "TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?set CLOUDFLARE_TUNNEL_TOKEN}" in cloudflared
+    assert "--token" not in cloudflared
+    assert "CLOUDFLARE_TUNNEL_TOKEN" not in _section(
+        cloudflared, "    command:\n", "    depends_on:\n"
+    )
+    assert "ports: []" in cloudflared
+    assert "cap_drop:\n      - ALL" in cloudflared
+    assert "no-new-privileges:true" in cloudflared
+
+    assert "JUPITER_API_KEY" not in text
+    assert "HELIUS_API_KEY" not in text
+    assert "GOPLUS_ACCESS_TOKEN" not in text
+
+
+def test_cloudflared_is_not_attached_to_internal_default_network():
+    text = (ROOT / "deploy" / "compose.hosted.yml").read_text()
+    dashboard = _section(text, "  dashboard:\n", "\n  cloudflared:\n")
+    cloudflared = _section(text, "  cloudflared:\n", "\nnetworks:\n")
+
+    assert "networks:\n      - default\n      - dashboard_edge" in dashboard
+    assert "networks:\n      - dashboard_edge" in cloudflared
+    assert "      - default" not in cloudflared
+
+
+def test_dashboard_db_role_is_select_only_and_password_is_not_a_psql_argument():
+    text = (ROOT / "deploy" / "compose.hosted.yml").read_text()
+    role = _section(text, "  dashboard-db-role:\n", "\n  dashboard:\n")
+
+    assert "DASHBOARD_DB_PASSWORD: ${DASHBOARD_DB_PASSWORD:?set DASHBOARD_DB_PASSWORD}" in role
+    assert "\\getenv dashboard_password DASHBOARD_DB_PASSWORD" in role
+    assert "-v dashboard_password" not in role
+    assert "GRANT CONNECT ON DATABASE edge TO edge_dashboard" in role
+    assert "GRANT USAGE ON SCHEMA public TO edge_dashboard" in role
+    assert "GRANT SELECT ON ALL TABLES IN SCHEMA public TO edge_dashboard" in role
+    assert "GRANT INSERT" not in role
+    assert "GRANT UPDATE" not in role
+    assert "GRANT DELETE" not in role
 
 
 def test_hosted_launcher_keeps_internal_api_private_and_routes_tunnel_to_dashboard():
-    hosted = (ROOT / 'deploy' / 'start-hosted.sh').read_text()
-    forward = (ROOT / 'deploy' / 'compose.forward.yml').read_text()
-    assert 'DASHBOARD_DB_PASSWORD' in hosted
-    assert 'CLOUDFLARE_TUNNEL_TOKEN' in hosted
-    assert 'SIGNER_ENABLED != false' in hosted
-    assert 'export SIGNER_ENABLED=false' in hosted
-    assert 'http://dashboard:8080' in hosted
-    assert 'http://api:8000' not in hosted
-    assert 'dashboard-db-role dashboard cloudflared' in hosted
-    assert '127.0.0.1:8000:8000' in forward
+    hosted = (ROOT / "deploy" / "start-hosted.sh").read_text()
+    forward = (ROOT / "deploy" / "compose.forward.yml").read_text()
+
+    assert "DASHBOARD_DB_PASSWORD is required" in hosted
+    assert "at least 24 characters" in hosted
+    assert "URL-safe A-Z, a-z, 0-9, _ and -" in hosted
+    assert "CLOUDFLARE_TUNNEL_TOKEN is required" in hosted
+    assert "Refusing to start with an example Cloudflare Tunnel token" in hosted
+    assert "SIGNER_ENABLED != false" in hosted
+    assert "export SIGNER_ENABLED=false" in hosted
+    assert "http://dashboard:8080" in hosted
+    assert "http://api:8000" not in hosted
+    assert "up -d --build dashboard-db-role dashboard cloudflared" in hosted
+    assert '"127.0.0.1:8000:8000"' in forward
 
 
-def test_example_env_never_contains_real_hosting_secrets():
-    lines = (ROOT / 'deploy' / '.env.forward.example').read_text().splitlines()
-    tunnel = next(line for line in lines if line.startswith('CLOUDFLARE_TUNNEL_TOKEN='))
-    dashboard_db = next(line for line in lines if line.startswith('DASHBOARD_DB_PASSWORD='))
-    assert tunnel == 'CLOUDFLARE_TUNNEL_TOKEN='
-    assert dashboard_db == 'DASHBOARD_DB_PASSWORD='
+def test_example_env_never_contains_real_hosted_secrets_and_pins_cloudflared():
+    text = (ROOT / "deploy" / ".env.forward.example").read_text()
+    tunnel_line = next(
+        line for line in text.splitlines() if line.startswith("CLOUDFLARE_TUNNEL_TOKEN=")
+    )
+    dashboard_db_line = next(
+        line for line in text.splitlines() if line.startswith("DASHBOARD_DB_PASSWORD=")
+    )
+
+    assert tunnel_line == "CLOUDFLARE_TUNNEL_TOKEN="
+    assert dashboard_db_line == "DASHBOARD_DB_PASSWORD="
+    assert "CLOUDFLARED_IMAGE=cloudflare/cloudflared:2026.7.3" in text
+    assert "Never commit the real file" in text
