@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="color-scheme" content="light dark" />
+  <meta name="theme-color" content="#f5f7f7" />
+  <title>Edge Lab</title>
+  <link rel="stylesheet" href="/dashboard/assets/dashboard.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Primary navigation">
+      <div class="brand">
+        <div class="brand-mark">E</div>
+        <div><strong>Edge Lab</strong><span>Research Terminal</span></div>
+      </div>
+      <nav>
+        <button class="nav-item active" data-section="overview"><span>⌂</span> Overview</button>
+        <button class="nav-item" data-section="strategies"><span>◫</span> Strategies</button>
+        <button class="nav-item" data-section="trades"><span>↗</span> Trades</button>
+        <button class="nav-item" data-section="incidents"><span>!</span> Incidents</button>
+      </nav>
+      <div class="sidebar-foot">
+        <div class="safety-chip"><i></i><span>Paper / shadow only</span></div>
+        <p>No live signing or fund movement.</p>
+      </div>
+    </aside>
+
+    <main class="content">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Research portfolio</p>
+          <h1>Overview</h1>
+        </div>
+        <div class="top-actions">
+          <span id="last-updated" class="updated">Loading…</span>
+          <button id="refresh" class="icon-button" aria-label="Refresh dashboard">↻</button>
+          <button id="theme-toggle" class="icon-button" aria-label="Toggle theme">◐</button>
+        </div>
+      </header>
+
+      <section id="overview" class="section active-section">
+        <div id="safety-banner" class="safety-banner">
+          <div><strong>Research mode</strong><span>Live trading, signing and treasury movement are disabled.</span></div>
+          <span class="mode-pill">READ ONLY</span>
+        </div>
+
+        <div class="metric-grid">
+          <article class="metric-card primary"><span>Combined study NAV</span><strong id="metric-nav">—</strong><small id="metric-return">—</small></article>
+          <article class="metric-card"><span>Net research P&amp;L</span><strong id="metric-pnl">—</strong><small id="metric-trades">—</small></article>
+          <article class="metric-card"><span>Forward studies</span><strong id="metric-studies">—</strong><small id="metric-active">—</small></article>
+          <article class="metric-card"><span>Evidence health</span><strong id="metric-health">—</strong><small id="metric-incidents">—</small></article>
+        </div>
+
+        <div class="dashboard-grid">
+          <article class="panel chart-panel">
+            <div class="panel-head"><div><p class="eyebrow">Performance</p><h2>NAV progression</h2></div><span class="subtle">Last 60 observations / study</span></div>
+            <div id="nav-chart" class="chart" aria-label="NAV progression chart"></div>
+            <div id="chart-legend" class="chart-legend"></div>
+          </article>
+          <article class="panel status-panel">
+            <div class="panel-head"><div><p class="eyebrow">System</p><h2>Safety state</h2></div></div>
+            <div class="safety-list">
+              <div><span>Signer</span><strong class="safe">Disabled</strong></div>
+              <div><span>Live orders</span><strong class="safe">Blocked</strong></div>
+              <div><span>Fund movement</span><strong class="safe">Blocked</strong></div>
+              <div><span>Vault access</span><strong class="safe">None</strong></div>
+            </div>
+            <div class="divider"></div>
+            <p class="panel-note">A strategy may become a <strong>GREEN-1 candidate</strong> only after its frozen forward-evidence gates pass. This screen cannot promote it or deploy capital.</p>
+          </article>
+        </div>
+
+        <article class="panel">
+          <div class="panel-head"><div><p class="eyebrow">Research engines</p><h2>Strategy studies</h2></div><span id="study-count" class="subtle"></span></div>
+          <div id="study-cards" class="study-grid"><div class="skeleton-card"></div><div class="skeleton-card"></div><div class="skeleton-card"></div></div>
+        </article>
+
+        <div class="dashboard-grid lower-grid">
+          <article class="panel">
+            <div class="panel-head"><div><p class="eyebrow">Latest activity</p><h2>Recent trades</h2></div><button class="text-button" data-go="trades">View all</button></div>
+            <div id="recent-trades" class="table-wrap"></div>
+          </article>
+          <article class="panel">
+            <div class="panel-head"><div><p class="eyebrow">Attention</p><h2>Open incidents</h2></div><button class="text-button" data-go="incidents">View all</button></div>
+            <div id="incident-list" class="incident-list"></div>
+          </article>
+        </div>
+      </section>
+
+      <section id="strategies" class="section">
+        <div class="section-heading"><div><p class="eyebrow">Research engines</p><h2>Strategies</h2></div><p>Frozen forward studies and their current evidence state.</p></div>
+        <div id="strategy-detail-grid" class="strategy-detail-grid"></div>
+      </section>
+
+      <section id="trades" class="section">
+        <div class="section-heading"><div><p class="eyebrow">Execution evidence</p><h2>Closed paper trades</h2></div><p>All values are simulated or shadow observations, never live fills.</p></div>
+        <article class="panel"><div id="all-trades" class="table-wrap"></div></article>
+      </section>
+
+      <section id="incidents" class="section">
+        <div class="section-heading"><div><p class="eyebrow">Research integrity</p><h2>Incidents</h2></div><p>Data-integrity failures permanently disqualify the affected frozen study.</p></div>
+        <div id="all-incidents" class="incident-list large"></div>
+      </section>
+    </main>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="/dashboard/assets/dashboard.js" defer></script>
+</body>
+</html>
