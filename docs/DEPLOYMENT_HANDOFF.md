@@ -15,13 +15,23 @@ This is the operational handoff for starting Edge Lab's **paper/shadow forward r
 - local PostgreSQL backups;
 - read-only Dashboard V1;
 - isolated Cloudflare Tunnel + Access deployment;
-- fail-closed deployment preflight/runtime verification.
+- fail-closed deployment preflight/runtime verification;
+- fresh Ubuntu VPS provisioning/readiness scripts.
 
 No wallet key, owner-vault credential, live signer, venue order-submission path, bridge transfer, or live-capital authorization belongs in this deployment.
 
 ## VPS baseline
 
-Use Linux with roughly 4 vCPU, 8 GB RAM, 100+ GB NVMe, Docker Engine + Compose v2, Git, Python 3 and curl. A GPU is not required.
+Use Ubuntu Server 24.04 LTS or 26.04 LTS with roughly 4 vCPU, 8 GB RAM and 100+ GB NVMe. A GPU is not required.
+
+For a fresh VPS, use `docs/VPS_PROVISIONING.md`. The host preparation flow is:
+
+```sh
+bash deploy/provision-ubuntu.sh
+bash deploy/check-vps-host.sh
+```
+
+The provisioner installs Docker Engine/Compose from Docker's official apt repository and host dependencies only. It never creates application credentials or wallet material.
 
 ## External credentials
 
@@ -35,7 +45,7 @@ Optional: `GOPLUS_ACCESS_TOKEN`.
 
 Do **not** provide a Solana/EVM private key, seed phrase/mnemonic, hardware-wallet secret, owner-vault credential or exchange withdrawal key.
 
-## One-time VPS preparation
+## One-time application preparation
 
 ```sh
 git clone <private-edge-lab-repository-url>
