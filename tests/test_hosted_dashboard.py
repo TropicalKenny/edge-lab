@@ -28,8 +28,11 @@ def test_hosted_compose_uses_isolated_dashboard_readonly_role_and_no_host_port()
     assert 'app.dashboard_server:app' in text
     assert 'SIGNER_ENABLED: "false"' in text
     assert 'cloudflared:' in text
-    assert 'CLOUDFLARE_TUNNEL_TOKEN:?set CLOUDFLARE_TUNNEL_TOKEN' in text
-    assert 'ports:' not in text
+    assert 'TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?set CLOUDFLARE_TUNNEL_TOKEN}' in text
+    assert text.count('ports: []') >= 2
+    assert 'dashboard_edge:' in text
+    assert 'cap_drop:' in text
+    assert 'no-new-privileges:true' in text
     assert 'JUPITER_API_KEY' not in text
     assert 'HELIUS_API_KEY' not in text
     assert 'GOPLUS_ACCESS_TOKEN' not in text
