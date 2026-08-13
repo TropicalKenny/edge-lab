@@ -5,7 +5,7 @@ import logging
 
 from app.config import get_settings
 from app.database import get_session_factory
-from app.hyperliquid_forward import HyperliquidCarryForwardRunner
+from app.hyperliquid_forward_hardened import HardenedHyperliquidCarryForwardRunner
 from app.services import HealthRegistry
 from app.venues.hyperliquid import HyperliquidInfoClient
 
@@ -21,14 +21,20 @@ async def run() -> None:
         network=settings.hyperliquid_network,
         timeout_seconds=settings.hyperliquid_timeout_seconds,
     ) as client:
-        runner = HyperliquidCarryForwardRunner(client=client, health=health)
+        runner = HardenedHyperliquidCarryForwardRunner(client=client, health=health)
         while True:
             db = SessionLocal()
             try:
                 results = await runner.run_active_studies(db)
                 for result in results:
-                    log.info("Hyperliquid forward study %s: %s - %s", result.study_id, result.action, result.detail)
+                    log.info(
+                        "Hyperliquid forward study %s: %s - %s",
+                        result.study_id,
+                        result.action,
+                        result.detail,
+                    )
             except Exception:
+                db.rollback()
                 log.exception("Hyperliquid forward runner cycle failed")
             finally:
                 db.close()
