@@ -50,6 +50,7 @@ class Settings(BaseSettings):
     polymarket_forward_planned_loss_pct: float = 0.02
     polymarket_forward_attempt_interval_seconds: int = 300
     polymarket_forward_max_attempts_per_cycle: int = 3
+    polymarket_forward_health_max_nav_age_seconds: int = 7200
     helius_api_key: str = ''
     helius_commitment: str = 'confirmed'
     helius_pump_program_ids: str = '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P,pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA'
