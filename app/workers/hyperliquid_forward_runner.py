@@ -5,7 +5,7 @@ import logging
 
 from app.config import get_settings
 from app.database import get_session_factory
-from app.hyperliquid_forward_hardened import HardenedHyperliquidCarryForwardRunner
+from app.hyperliquid_forward_operational import OperationalHyperliquidCarryForwardRunner
 from app.services import HealthRegistry
 from app.venues.hyperliquid import HyperliquidInfoClient
 
@@ -21,7 +21,7 @@ async def run() -> None:
         network=settings.hyperliquid_network,
         timeout_seconds=settings.hyperliquid_timeout_seconds,
     ) as client:
-        runner = HardenedHyperliquidCarryForwardRunner(client=client, health=health)
+        runner = OperationalHyperliquidCarryForwardRunner(client=client, health=health)
         while True:
             db = SessionLocal()
             try:
