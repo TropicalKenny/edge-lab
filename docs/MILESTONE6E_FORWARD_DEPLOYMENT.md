@@ -6,9 +6,12 @@ This milestone prepares the paper/shadow research system for an unattended VPS r
 
 - `SIGNER_ENABLED=false` is forced by the launchers and Compose overlays.
 - PostgreSQL and Redis are not published to the host network.
-- The internal research API is bound to `127.0.0.1:8000`, not the public internet.
-- Dashboard V1 uses a **separate** FastAPI gateway bound to `127.0.0.1:8080` and a PostgreSQL `edge_dashboard` **SELECT-only** login.
-- Cloudflare Tunnel must reach only the dashboard gateway at `http://dashboard:8080` on the private Compose network.
+- The internal research API is bound to `127.0.0.1:8000`, not the public Internet.
+- Dashboard V1 uses a **separate** FastAPI gateway bound to `127.0.0.1:8080`.
+- The dashboard uses PostgreSQL login `edge_dashboard`, with an **exact table allowlist and SELECT-only privileges**.
+- `cloudflared` is attached only to `dashboard_gateway`; it shares no Docker network with the research API.
+- The dashboard joins both `dashboard_gateway` and the private default network so it can read its allowlisted database tables.
+- Cloudflare Tunnel reaches only the dashboard gateway at `http://dashboard:8080`.
 - Database, dashboard and forward-ingest secrets are separate and have no committed real defaults.
 - Provider credentials are research/data credentials only; wallet/signing keys are not part of this deployment.
 - The owner vault remains outside the VPS.
@@ -19,11 +22,11 @@ This milestone prepares the paper/shadow research system for an unattended VPS r
 ```bash
 cp deploy/.env.forward.example deploy/.env.forward
 chmod 600 deploy/.env.forward
-# replace the required secrets and research API keys
+# replace required secrets and research API keys
 sh deploy/preflight-forward.sh
 ```
 
-The normal preflight validates research services, the local isolated dashboard, and the Cloudflare tunnel definition. It therefore requires `CLOUDFLARE_TUNNEL_TOKEN`. To validate the private research stack plus local dashboard before a tunnel token exists:
+Normal preflight validates research services, the local isolated dashboard and the Cloudflare tunnel definition, so it requires `CLOUDFLARE_TUNNEL_TOKEN`. To validate the research stack plus local dashboard before a tunnel token exists:
 
 ```bash
 sh deploy/preflight-forward.sh --research-only
@@ -33,19 +36,23 @@ Preflight does **not** start a trade or enable a signer. It fails closed when:
 
 - Docker/Compose or Python are unavailable;
 - the real environment file is missing or has loose Linux permissions;
-- wallet/private-key/seed variables are found in the deployment environment;
+- wallet/private-key/seed variables are found in deployment environment;
 - PostgreSQL, ingest, dashboard, Helius or Jupiter credentials are missing;
-- required secrets still contain example placeholders, are below minimum length, or the dashboard database secret reuses a privileged secret;
+- required secrets still contain examples, are below minimum length or reuse privileged secrets;
 - `SIGNER_ENABLED` is not exactly false;
-- the real environment/backup paths are not gitignored;
+- environment/backup paths are not gitignored;
 - the full Compose stack does not render;
 - an expected research/dashboard service is missing;
 - PostgreSQL or Redis acquires a host port;
-- the research API stops being loopback-only on port 8000;
-- the dashboard stops being loopback-only on port 8080;
-- the dashboard stops using the dedicated `edge_dashboard` database identity;
+- research API stops being loopback-only on 8000;
+- dashboard stops being loopback-only on 8080;
+- dashboard stops using the dedicated `edge_dashboard` identity;
+- dashboard receives provider/ingest credentials;
+- dashboard database bootstrap broadens access beyond the exact table SELECT allowlist or contains a write grant;
 - any critical forward/dashboard service stops forcing signing off;
-- cloudflared receives database/provider credentials, publishes a host port, depends on the research API, or stops depending on the isolated dashboard service.
+- cloudflared receives database/provider credentials or publishes a host port;
+- cloudflared stops depending on the isolated dashboard gateway;
+- cloudflared shares any Docker network with the research API.
 
 Rendered Compose JSON contains interpolated secrets, so preflight keeps it in an in-memory pipe and never writes or echoes it.
 
@@ -64,9 +71,22 @@ The launcher composes:
 - `deploy/compose.solana-forward.yml`
 - `deploy/compose.dashboard.yml`
 
-The stack starts PostgreSQL, Redis, migrations, the private research API, the isolated dashboard gateway, all three public-data/forward research engines, the shared recommendation-only evaluator, and the database backup loop. The dashboard role bootstrap is a one-shot service that grants SELECT only.
+The stack starts PostgreSQL, Redis, migrations, the private research API, the isolated dashboard gateway, all three public-data/forward research engines, the shared recommendation-only evaluator and the database backup loop.
 
-Every forward service and the dashboard explicitly keep `SIGNER_ENABLED=false`.
+The dashboard role bootstrap is one-shot. On every run it removes any earlier broad/default dashboard grants and grants SELECT only to:
+
+- `strategies`
+- `strategy_versions`
+- `strategy_evaluation_runs`
+- `forward_studies`
+- `forward_nav_observations`
+- `forward_study_incidents`
+- `forward_trade_records`
+- `forward_execution_records`
+
+Future tables receive no automatic dashboard access.
+
+Every forward service and dashboard explicitly keep `SIGNER_ENABLED=false`.
 
 ## Hosted dashboard start
 
@@ -82,7 +102,9 @@ Then start the tunnel:
 sh deploy/start-dashboard-tunnel.sh
 ```
 
-The tunnel is deliberately separate. Stopping public dashboard access therefore does not stop private research workers. Never configure the public hostname to the internal `api:8000` service.
+The tunnel is deliberately separate. Stopping public dashboard access does not stop private research workers.
+
+Do not configure the hostname to `api:8000`. The network topology also prevents cloudflared from directly reaching the API service: cloudflared is on `dashboard_gateway` only, while the research API is on the private default network.
 
 ## Runtime verification
 
@@ -98,15 +120,16 @@ Include the tunnel container:
 sh deploy/verify-forward.sh --with-dashboard
 ```
 
-Verification requires the expected long-running research services plus the isolated dashboard gateway. It checks the dashboard health/page/assets and the hard safety flags:
+Verification requires expected long-running research services plus the isolated dashboard. It verifies:
 
-- `can_trade_live=false`
-- `can_sign=false`
-- `can_move_funds=false`
-- `vault_accessible=false`
-- `signer_enabled=false`
-
-It also verifies an internal forward route returns 404 on the dashboard gateway.
+- dashboard health/page/assets on loopback 8080;
+- internal research and documentation routes return 404 on the dashboard gateway;
+- dashboard safety flags remain false and live capital remains `$0`;
+- dashboard capital scope remains explicitly simulated;
+- the actual PostgreSQL user is `edge_dashboard`;
+- the dashboard can SELECT exactly the allowlisted tables and no others;
+- the dashboard has no INSERT/UPDATE/DELETE/TRUNCATE/REFERENCES/TRIGGER table privilege;
+- with the tunnel enabled, running cloudflared and research API containers share no Docker network.
 
 After initial market/evidence heartbeats exist, use strict verification:
 
@@ -148,12 +171,6 @@ Manual backup:
 sh deploy/backup-now.sh
 ```
 
-## Network exposure and dashboard
-
-Dashboard V1 is served publicly only by `app.dashboard_server` on the private `dashboard:8080` service. The research API remains a separate private process on loopback port 8000. PostgreSQL, Redis, collectors and forward workers stay private.
-
-The `cloudflared` container depends on the healthy dashboard service, publishes no host port, receives only its tunnel credential, and must be protected by the owner-only Cloudflare Access application.
-
 ## Before a forward clock is trusted
 
 For each enabled venue study:
@@ -163,7 +180,7 @@ For each enabled venue study:
 3. Verify automatic backups can be restored to a disposable database.
 4. Confirm each idempotent bootstrap created its immutable strategy/version/experiment and frozen study exactly once.
 5. Confirm each venue-specific `status --require-ready` command reports ready after required fresh evidence/heartbeats exist.
-6. Confirm the isolated Dashboard V1 shows expected study/NAV evidence and no unresolved data-integrity incident.
+6. Confirm isolated Dashboard V1 shows expected simulated study/NAV evidence and no unresolved data-integrity incident.
 7. Confirm the shared forward evaluator produces recommendation-only audit rows without changing `Strategy.status`.
 8. Pass `sh deploy/verify-forward.sh --with-dashboard --strict` when the tunnel is enabled.
 9. Only then rely on the stored study start timestamp for the intended evidence horizon.
