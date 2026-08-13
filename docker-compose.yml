@@ -124,19 +124,6 @@ services:
       start_period: 120s
     restart: unless-stopped
 
-  forward-evaluator:
-    profiles: ["forward"]
-    build: .
-    command: ["python", "-m", "app.workers.forward_evaluator"]
-    environment:
-      DATABASE_URL: postgresql+psycopg://edge:edge@postgres:5432/edge
-      SIGNER_ENABLED: "false"
-      FORWARD_EVALUATION_POLL_SECONDS: ${FORWARD_EVALUATION_POLL_SECONDS:-3600}
-    depends_on:
-      hyperliquid-forward-bootstrap:
-        condition: service_completed_successfully
-    restart: unless-stopped
-
   polymarket-collector:
     build: .
     command: ["python", "-m", "app.workers.polymarket_collector"]
@@ -149,6 +136,77 @@ services:
       POLYMARKET_MAX_NEGRISK_EVENTS: "8"
     depends_on:
       migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  polymarket-forward-bootstrap:
+    profiles: ["forward"]
+    build: .
+    command: ["python", "-m", "app.workers.polymarket_forward_bootstrap"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://edge:edge@postgres:5432/edge
+      SIGNER_ENABLED: "false"
+      POLYMARKET_FORWARD_STUDY_EXTERNAL_ID: ${POLYMARKET_FORWARD_STUDY_EXTERNAL_ID:-polymarket-structural-m6f-v1}
+      POLYMARKET_FORWARD_INITIAL_CAPITAL_USD: ${POLYMARKET_FORWARD_INITIAL_CAPITAL_USD:-1000}
+      POLYMARKET_FORWARD_FEE_BUFFER_PCT: ${POLYMARKET_FORWARD_FEE_BUFFER_PCT:-2}
+      POLYMARKET_FORWARD_SHADOW_DELAY_MS: ${POLYMARKET_FORWARD_SHADOW_DELAY_MS:-1000}
+      POLYMARKET_FORWARD_OPERATION_COST_USD: ${POLYMARKET_FORWARD_OPERATION_COST_USD:-0.25}
+      POLYMARKET_FORWARD_PLANNED_LOSS_PCT: ${POLYMARKET_FORWARD_PLANNED_LOSS_PCT:-0.02}
+      POLYMARKET_FORWARD_ATTEMPT_INTERVAL_SECONDS: ${POLYMARKET_FORWARD_ATTEMPT_INTERVAL_SECONDS:-300}
+      POLYMARKET_FORWARD_MAX_ATTEMPTS_PER_CYCLE: ${POLYMARKET_FORWARD_MAX_ATTEMPTS_PER_CYCLE:-3}
+      POLYMARKET_MAX_MARKETS: ${POLYMARKET_MAX_MARKETS:-50}
+      POLYMARKET_MAX_NEGRISK_EVENTS: ${POLYMARKET_MAX_NEGRISK_EVENTS:-8}
+      POLYMARKET_MAX_SHARES_PER_OPPORTUNITY: ${POLYMARKET_MAX_SHARES_PER_OPPORTUNITY:-100}
+      POLYMARKET_MIN_EDGE_BPS: ${POLYMARKET_MIN_EDGE_BPS:-10}
+      POLYMARKET_MAX_BOOK_AGE_SECONDS: ${POLYMARKET_MAX_BOOK_AGE_SECONDS:-10}
+      EVALUATION_MIN_FORWARD_DAYS: ${EVALUATION_MIN_FORWARD_DAYS:-90}
+      EVALUATION_MIN_NAV_OBSERVATIONS: ${EVALUATION_MIN_NAV_OBSERVATIONS:-60}
+      EVALUATION_MIN_SHADOW_OBSERVATIONS: ${EVALUATION_MIN_SHADOW_OBSERVATIONS:-30}
+      EVALUATION_MIN_TRADES_DEFAULT: ${EVALUATION_MIN_TRADES_DEFAULT:-100}
+      EVALUATION_MIN_TRADES_FUNDING: ${EVALUATION_MIN_TRADES_FUNDING:-60}
+      EVALUATION_MIN_TRADES_DIRECTIONAL: ${EVALUATION_MIN_TRADES_DIRECTIONAL:-100}
+      EVALUATION_MIN_TRADES_MEME: ${EVALUATION_MIN_TRADES_MEME:-300}
+      EVALUATION_MIN_FORECASTS_PREDICTION: ${EVALUATION_MIN_FORECASTS_PREDICTION:-50}
+      EVALUATION_MAX_DRAWDOWN_PCT: ${EVALUATION_MAX_DRAWDOWN_PCT:-0.15}
+      EVALUATION_MIN_PROFIT_FACTOR: ${EVALUATION_MIN_PROFIT_FACTOR:-1.30}
+      EVALUATION_MAX_TOP3_PROFIT_CONCENTRATION: ${EVALUATION_MAX_TOP3_PROFIT_CONCENTRATION:-0.50}
+      EVALUATION_COST_STRESS_MULTIPLIER: ${EVALUATION_COST_STRESS_MULTIPLIER:-2.0}
+      EVALUATION_MIN_SHADOW_FILL_RATIO: ${EVALUATION_MIN_SHADOW_FILL_RATIO:-0.90}
+      EVALUATION_MAX_SHADOW_P90_PRICE_DIVERGENCE_BPS: ${EVALUATION_MAX_SHADOW_P90_PRICE_DIVERGENCE_BPS:-50}
+      EVALUATION_MAX_PREDICTION_CALIBRATION_ERROR: ${EVALUATION_MAX_PREDICTION_CALIBRATION_ERROR:-0.10}
+      EVALUATION_MAX_NAV_GAP_DAYS: ${EVALUATION_MAX_NAV_GAP_DAYS:-3.0}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: "no"
+
+  polymarket-forward-runner:
+    profiles: ["forward"]
+    build: .
+    command: ["python", "-m", "app.workers.polymarket_forward_runner"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://edge:edge@postgres:5432/edge
+      REDIS_URL: redis://redis:6379/0
+      SIGNER_ENABLED: "false"
+      POLYMARKET_TIMEOUT_SECONDS: ${POLYMARKET_TIMEOUT_SECONDS:-10}
+      POLYMARKET_FORWARD_POLL_SECONDS: ${POLYMARKET_FORWARD_POLL_SECONDS:-60}
+    depends_on:
+      polymarket-forward-bootstrap:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  forward-evaluator:
+    profiles: ["forward"]
+    build: .
+    command: ["python", "-m", "app.workers.forward_evaluator"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://edge:edge@postgres:5432/edge
+      SIGNER_ENABLED: "false"
+      FORWARD_EVALUATION_POLL_SECONDS: ${FORWARD_EVALUATION_POLL_SECONDS:-3600}
+    depends_on:
+      hyperliquid-forward-bootstrap:
+        condition: service_completed_successfully
+      polymarket-forward-bootstrap:
         condition: service_completed_successfully
     restart: unless-stopped
 
