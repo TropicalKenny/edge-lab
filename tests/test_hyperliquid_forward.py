@@ -1,5 +1,4 @@
 import asyncio
-import json
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
@@ -8,12 +7,17 @@ from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session
 
 from app.evaluation import EvaluationPolicy
-from app.forward_models import ForwardExecutionRecord, ForwardTradeRecord
+from app.forward_models import ForwardExecutionRecord, ForwardNavObservation, ForwardTradeRecord
 from app.forward_research import ForwardResearchService
-from app.hyperliquid_forward import CarryRunnerConfigError, CarryStudyConfig, HyperliquidCarryForwardRunner
+from app.hyperliquid_forward import (
+    CarryRunnerConfigError,
+    CarryStudyConfig,
+    HyperliquidCarryForwardRunner,
+)
 from app.hyperliquid_forward_models import HyperliquidCarryPosition
 from app.models import Base, Experiment, Strategy, StrategyVersion
 from app.services import HealthRegistry
+from app.venues.hyperliquid_models import HyperliquidPerpSnapshot
 import app.evaluation_models
 import app.forward_models
 import app.hyperliquid_forward_models
@@ -38,6 +42,7 @@ class FakeHyperliquidClient:
         self.book_quantity = book_quantity
         self.funding_points = funding_points or []
         self.book_calls = 0
+        self.book_times: list[datetime] = []
 
     async def meta_and_asset_contexts(self, dex: str = ""):
         return [
@@ -65,6 +70,8 @@ class FakeHyperliquidClient:
     async def l2_book(self, coin: str):
         self.book_calls += 1
         now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+        observed_at = datetime.fromtimestamp(now_ms / 1000, tz=timezone.utc)
+        self.book_times.append(observed_at)
         qty = self.book_quantity
         if coin == "@0":
             bids = [{"px": str(D(self.spot_mid) - D("0.1")), "sz": qty}]
@@ -134,9 +141,10 @@ def make_study(db: Session, *, now: datetime, config_overrides=None, started_hou
         "slippage_reserve_bps_per_leg": "2",
         "shadow_delay_ms": 0,
         "max_exit_delay_hours": 3,
+        "max_funding_oracle_age_minutes": 5,
     }
     cfg.update(config_overrides or {})
-    study = ForwardResearchService.create_study(
+    return ForwardResearchService.create_study(
         db,
         external_id="hl-carry-forward",
         strategy_slug=strategy.slug,
@@ -150,13 +158,12 @@ def make_study(db: Session, *, now: datetime, config_overrides=None, started_hou
         study_config=cfg,
         started_at=now - timedelta(hours=started_hours_ago, minutes=5),
     )
-    return study
 
 
 def test_eligible_carry_opens_only_after_both_paper_and_shadow_legs_fill():
     now = datetime.now(timezone.utc)
     db = db_session()
-    study = make_study(db, now=now)
+    study = make_study(db, now=now, started_hours_ago=2)
     client = FakeHyperliquidClient()
     runner = HyperliquidCarryForwardRunner(client=client, health=HealthRegistry())
 
@@ -168,6 +175,11 @@ def test_eligible_carry_opens_only_after_both_paper_and_shadow_legs_fill():
     executions = db.scalars(
         select(ForwardExecutionRecord).where(ForwardExecutionRecord.study_id == study.id)
     ).all()
+    navs = db.scalars(
+        select(ForwardNavObservation)
+        .where(ForwardNavObservation.study_id == study.id)
+        .order_by(ForwardNavObservation.observed_at.asc())
+    ).all()
     assert result.action == "opened"
     assert position is not None and position.status == "open"
     assert position.coin == "BTC" and position.spot_book_coin == "@0"
@@ -176,7 +188,12 @@ def test_eligible_carry_opens_only_after_both_paper_and_shadow_legs_fill():
     assert len(executions) == 2
     assert all(D(row.paper_filled_quantity) == D("1") for row in executions)
     assert all(D(row.shadow_filled_quantity) == D("1") for row in executions)
-    assert client.book_calls >= 4
+    assert client.book_calls >= 6
+    assert len(navs) == 2
+    assert navs[-1].observed_at in client.book_times
+    assert navs[-1].observed_at != navs[-1].observed_at.replace(
+        minute=0, second=0, microsecond=0
+    )
     db.close()
 
 
@@ -213,7 +230,7 @@ def test_study_config_forbids_using_more_than_initial_capital_without_leverage()
     db.close()
 
 
-def test_due_position_closes_atomically_into_forward_trade_with_settled_funding():
+def test_due_position_closes_atomically_using_oracle_based_settled_funding():
     now = datetime.now(timezone.utc)
     funding_time = now - timedelta(minutes=30)
     db = db_session()
@@ -237,9 +254,9 @@ def test_due_position_closes_atomically_into_forward_trade_with_settled_funding(
         opened_at=now - timedelta(hours=2),
         target_close_at=now - timedelta(hours=1),
         entry_spot_mid=D("100"),
-        entry_perp_mid=D("100"),
+        entry_perp_mid=D("80"),
         entry_spot_price=D("100.1"),
-        entry_perp_price=D("99.9"),
+        entry_perp_price=D("79.9"),
         entry_spot_fee_usd=D("0.07"),
         entry_perp_fee_usd=D("0.045"),
         entry_spot_slippage_usd=D("0.1"),
@@ -247,6 +264,19 @@ def test_due_position_closes_atomically_into_forward_trade_with_settled_funding(
         metadata_json="{}",
     )
     db.add(position)
+    db.add(
+        HyperliquidPerpSnapshot(
+            coin="BTC",
+            mark_px=D("999"),
+            mid_px=D("999"),
+            oracle_px=D("100"),
+            funding_rate_hourly=D("0.001"),
+            premium=D("0"),
+            open_interest=D("1000"),
+            day_ntl_volume=D("1000000"),
+            captured_at=funding_time - timedelta(minutes=1),
+        )
+    )
     db.commit()
     db.refresh(position)
     client = FakeHyperliquidClient(
@@ -268,8 +298,11 @@ def test_due_position_closes_atomically_into_forward_trade_with_settled_funding(
     assert result.action == "closed"
     assert position.status == "closed" and position.trade_record_id is not None
     assert trade is not None and trade.id == position.trade_record_id
+    # Funding must use the persisted oracle (100), not the mark (999) or entry mid (80).
     assert D(position.funding_pnl_usd) == D("0.1000000000")
-    assert D(trade.net_pnl_usd) == D(trade.gross_pnl_usd) - D(trade.fees_usd) - D(trade.slippage_usd)
+    assert D(trade.net_pnl_usd) == D(trade.gross_pnl_usd) - D(trade.fees_usd) - D(
+        trade.slippage_usd
+    )
     assert D(position.net_pnl_usd) == D(trade.net_pnl_usd)
     db.close()
 
