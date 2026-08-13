@@ -20,6 +20,7 @@ def upgrade() -> None:
         "strategy_evaluation_runs",
         sa.Column("id", sa.String(36), nullable=False),
         sa.Column("external_run_id", sa.String(100), nullable=False),
+        sa.Column("strategy_version_id", sa.String(36), nullable=False),
         sa.Column("strategy_slug", sa.String(100), nullable=False),
         sa.Column("strategy_version", sa.String(64), nullable=False),
         sa.Column("family", sa.String(32), nullable=False),
@@ -41,16 +42,17 @@ def upgrade() -> None:
         sa.Column("reasons_json", sa.Text(), nullable=False),
         sa.Column("input_json", sa.Text(), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.ForeignKeyConstraint(["strategy_version_id"], ["strategy_versions.id"]),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("external_run_id"),
     )
     op.create_index("ix_strategy_evaluation_runs_external_run_id", "strategy_evaluation_runs", ["external_run_id"], unique=True)
-    for column in ("strategy_slug", "strategy_version", "family", "recommendation", "created_at"):
+    for column in ("strategy_version_id", "strategy_slug", "strategy_version", "family", "recommendation", "created_at"):
         op.create_index(f"ix_strategy_evaluation_runs_{column}", "strategy_evaluation_runs", [column])
 
 
 def downgrade() -> None:
-    for column in ("created_at", "recommendation", "family", "strategy_version", "strategy_slug"):
+    for column in ("created_at", "recommendation", "family", "strategy_version", "strategy_slug", "strategy_version_id"):
         op.drop_index(f"ix_strategy_evaluation_runs_{column}", table_name="strategy_evaluation_runs")
     op.drop_index("ix_strategy_evaluation_runs_external_run_id", table_name="strategy_evaluation_runs")
     op.drop_table("strategy_evaluation_runs")
