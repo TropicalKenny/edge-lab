@@ -68,6 +68,7 @@ esac
 [ "${#POSTGRES_PASSWORD}" -ge 24 ] || fail "POSTGRES_PASSWORD must be at least 24 characters"
 [ "${#FORWARD_INGEST_SECRET}" -ge 32 ] || fail "FORWARD_INGEST_SECRET must be at least 32 characters"
 [ "${#DASHBOARD_DB_PASSWORD}" -ge 24 ] || fail "DASHBOARD_DB_PASSWORD must be at least 24 characters"
+[ "$POSTGRES_PASSWORD" != "$FORWARD_INGEST_SECRET" ] || fail "POSTGRES_PASSWORD must differ from FORWARD_INGEST_SECRET"
 [ "$DASHBOARD_DB_PASSWORD" != "$POSTGRES_PASSWORD" ] || fail "DASHBOARD_DB_PASSWORD must differ from POSTGRES_PASSWORD"
 [ "$DASHBOARD_DB_PASSWORD" != "$FORWARD_INGEST_SECRET" ] || fail "DASHBOARD_DB_PASSWORD must differ from FORWARD_INGEST_SECRET"
 
@@ -129,6 +130,12 @@ def fail(msg):
 def ports(name):
     return services.get(name, {}).get("ports") or []
 
+def networks(name):
+    value=services.get(name, {}).get("networks") or {}
+    if isinstance(value, dict):
+        return set(value)
+    return set(value)
+
 def one_loopback(name, published, target):
     values=ports(name)
     if len(values)!=1:
@@ -149,23 +156,41 @@ for name in ("api","dashboard","hyperliquid-forward-runner","polymarket-forward-
     if str(env.get("SIGNER_ENABLED","")).lower()!="false": fail(name+" does not force SIGNER_ENABLED=false")
 
 dashboard=services.get("dashboard", {})
-db_url=str((dashboard.get("environment") or {}).get("DATABASE_URL") or "")
-if "edge_dashboard:" not in db_url:
+dashboard_env=dashboard.get("environment") or {}
+if set(dashboard_env) - {"DATABASE_URL","SIGNER_ENABLED"}:
+    fail("dashboard receives unexpected environment variables")
+db_url=str(dashboard_env.get("DATABASE_URL") or "")
+if not db_url.startswith("postgresql+psycopg://edge_dashboard:") or not db_url.endswith("@postgres:5432/edge"):
     fail("dashboard does not use the dedicated edge_dashboard database login")
-for forbidden in ("FORWARD_INGEST_SECRET","HELIUS_API_KEY","JUPITER_API_KEY","GOPLUS_ACCESS_TOKEN"):
-    if forbidden in (dashboard.get("environment") or {}):
-        fail("dashboard unexpectedly receives "+forbidden)
+if "dashboard_gateway" not in networks("dashboard"):
+    fail("dashboard is missing the isolated gateway network")
+if "default" not in networks("dashboard"):
+    fail("dashboard is missing the private database network")
+
+role_command=str((services.get("dashboard-db-role", {}) or {}).get("command") or "")
+for table in (
+    "strategies","strategy_versions","strategy_evaluation_runs","forward_studies",
+    "forward_nav_observations","forward_study_incidents","forward_trade_records","forward_execution_records",
+):
+    if table not in role_command: fail("dashboard role grant is missing table: "+table)
+if "GRANT SELECT ON ALL TABLES" in role_command:
+    fail("dashboard role grants SELECT on all tables")
+if "GRANT INSERT" in role_command or "GRANT UPDATE" in role_command or "GRANT DELETE" in role_command:
+    fail("dashboard role contains a write grant")
 
 if with_tunnel:
     if ports("cloudflared"): fail("cloudflared has a published host port")
     cf=services.get("cloudflared", {})
     cf_env=cf.get("environment") or {}
+    if set(cf_env) != {"TUNNEL_TOKEN"}: fail("cloudflared receives unexpected environment variables")
     if not cf_env.get("TUNNEL_TOKEN"): fail("cloudflared tunnel token is not injected")
-    for forbidden in ("DATABASE_URL","POSTGRES_PASSWORD","DASHBOARD_DB_PASSWORD","FORWARD_INGEST_SECRET","HELIUS_API_KEY","JUPITER_API_KEY","GOPLUS_ACCESS_TOKEN"):
-        if forbidden in cf_env: fail("cloudflared unexpectedly receives "+forbidden)
     depends=cf.get("depends_on") or {}
     if "dashboard" not in depends: fail("cloudflared does not depend on the isolated dashboard service")
     if "api" in depends: fail("cloudflared must not depend on the research API")
+    cf_networks=networks("cloudflared")
+    if "dashboard_gateway" not in cf_networks: fail("cloudflared is missing dashboard_gateway")
+    if cf_networks & networks("api"): fail("cloudflared shares a Docker network with the research API")
+    if not (cf_networks & networks("dashboard")): fail("cloudflared cannot reach the dashboard gateway")
 '
 pass "rendered network, dashboard database and signer boundaries are fail-closed"
 
