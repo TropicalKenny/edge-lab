@@ -5,11 +5,16 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def service_block(text: str, name: str) -> str:
-    marker = f"  {name}:\n"
-    assert marker in text
-    rest = text.split(marker, 1)[1]
-    next_service = rest.find("\n  ")
-    return rest if next_service < 0 else rest[:next_service]
+    lines = text.splitlines()
+    marker = f"  {name}:"
+    assert marker in lines
+    start = lines.index(marker) + 1
+    block: list[str] = []
+    for line in lines[start:]:
+        if line.startswith("  ") and not line.startswith("    "):
+            break
+        block.append(line)
+    return "\n".join(block)
 
 
 def test_forward_compose_keeps_data_services_private_and_signer_disabled():
