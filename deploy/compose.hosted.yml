@@ -1,12 +1,34 @@
 services:
+  dashboard-db-role:
+    image: postgres:16-alpine
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      DASHBOARD_DB_PASSWORD: ${DASHBOARD_DB_PASSWORD:?set DASHBOARD_DB_PASSWORD}
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        psql -h postgres -U edge -d edge -v ON_ERROR_STOP=1 -v dashboard_password="$${DASHBOARD_DB_PASSWORD}" <<'SQL'
+        SELECT format('CREATE ROLE edge_dashboard LOGIN PASSWORD %L', :'dashboard_password')
+        WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'edge_dashboard') \gexec
+        SELECT format('ALTER ROLE edge_dashboard PASSWORD %L', :'dashboard_password') \gexec
+        GRANT CONNECT ON DATABASE edge TO edge_dashboard;
+        GRANT USAGE ON SCHEMA public TO edge_dashboard;
+        GRANT SELECT ON ALL TABLES IN SCHEMA public TO edge_dashboard;
+        ALTER DEFAULT PRIVILEGES FOR ROLE edge IN SCHEMA public GRANT SELECT ON TABLES TO edge_dashboard;
+        SQL
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: "no"
+
   dashboard:
     build: .
     command: ["uvicorn", "app.dashboard_server:app", "--host", "0.0.0.0", "--port", "8080"]
     environment:
-      DATABASE_URL: postgresql+psycopg://edge:${POSTGRES_PASSWORD}@postgres:5432/edge
+      DATABASE_URL: postgresql+psycopg://edge_dashboard:${DASHBOARD_DB_PASSWORD}@postgres:5432/edge
       SIGNER_ENABLED: "false"
     depends_on:
-      migrate:
+      dashboard-db-role:
         condition: service_completed_successfully
     healthcheck:
       test:
