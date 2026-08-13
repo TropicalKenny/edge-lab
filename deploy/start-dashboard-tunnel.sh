@@ -9,6 +9,9 @@ if [ ! -f "$ENV_FILE" ]; then
   exit 1
 fi
 
+# Tunnel launches cannot bypass topology, secret, signer or network-isolation checks.
+sh deploy/preflight-forward.sh
+
 set -a
 # shellcheck disable=SC1090
 . "$ENV_FILE"
@@ -49,5 +52,6 @@ cat <<'EOF'
 Dashboard tunnel started.
 Cloudflare's remotely managed Public Hostname must target: http://dashboard:8080
 Do NOT configure the public hostname to target api:8000.
+The cloudflared container is not attached to the research API network.
 Keep the hostname behind an owner-only Cloudflare Access application.
 EOF
