@@ -17,10 +17,26 @@ services:
         END
         $do$;
         ALTER ROLE edge_dashboard PASSWORD :'dashboard_password';
+        ALTER ROLE edge_dashboard NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS;
         GRANT CONNECT ON DATABASE edge TO edge_dashboard;
         GRANT USAGE ON SCHEMA public TO edge_dashboard;
-        GRANT SELECT ON ALL TABLES IN SCHEMA public TO edge_dashboard;
-        ALTER DEFAULT PRIVILEGES FOR ROLE edge IN SCHEMA public GRANT SELECT ON TABLES TO edge_dashboard;
+
+        -- Remove any broader grants from an earlier dashboard deployment before
+        -- granting only the tables Dashboard V1 actually reads.
+        REVOKE ALL ON ALL TABLES IN SCHEMA public FROM edge_dashboard;
+        REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM edge_dashboard;
+        ALTER DEFAULT PRIVILEGES FOR ROLE edge IN SCHEMA public REVOKE SELECT ON TABLES FROM edge_dashboard;
+
+        GRANT SELECT ON TABLE
+          strategies,
+          strategy_versions,
+          strategy_evaluation_runs,
+          forward_studies,
+          forward_nav_observations,
+          forward_study_incidents,
+          forward_trade_records,
+          forward_execution_records
+        TO edge_dashboard;
         SQL
     depends_on:
       migrate:
@@ -38,6 +54,9 @@ services:
         condition: service_completed_successfully
     ports:
       - "127.0.0.1:8080:8080"
+    networks:
+      - default
+      - dashboard_gateway
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=3).read()"]
       interval: 30s
@@ -45,3 +64,7 @@ services:
       retries: 3
       start_period: 30s
     restart: unless-stopped
+
+networks:
+  dashboard_gateway:
+    driver: bridge
