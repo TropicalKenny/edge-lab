@@ -47,11 +47,13 @@ case "$POSTGRES_PASSWORD" in replace-with-*|example-*|changeme|CHANGE_ME) fail "
 case "$FORWARD_INGEST_SECRET" in replace-with-*|example-*|changeme|CHANGE_ME) fail "FORWARD_INGEST_SECRET is still an example value" ;; esac
 [ "${#POSTGRES_PASSWORD}" -ge 24 ] || fail "POSTGRES_PASSWORD must be at least 24 characters"
 [ "${#FORWARD_INGEST_SECRET}" -ge 32 ] || fail "FORWARD_INGEST_SECRET must be at least 32 characters"
+[ "$POSTGRES_PASSWORD" != "$FORWARD_INGEST_SECRET" ] || fail "POSTGRES_PASSWORD must differ from FORWARD_INGEST_SECRET"
 
 if [ "$WITH_DASHBOARD" -eq 1 ]; then
   : "${DASHBOARD_DB_PASSWORD:?DASHBOARD_DB_PASSWORD is required for dashboard preflight}"
   : "${CLOUDFLARE_TUNNEL_TOKEN:?CLOUDFLARE_TUNNEL_TOKEN is required for dashboard preflight}"
   [ "$DASHBOARD_DB_PASSWORD" != "$POSTGRES_PASSWORD" ] || fail "DASHBOARD_DB_PASSWORD must differ from POSTGRES_PASSWORD"
+  [ "$DASHBOARD_DB_PASSWORD" != "$FORWARD_INGEST_SECRET" ] || fail "DASHBOARD_DB_PASSWORD must differ from FORWARD_INGEST_SECRET"
   [ "${#DASHBOARD_DB_PASSWORD}" -ge 24 ] || fail "DASHBOARD_DB_PASSWORD must be at least 24 characters"
   case "$DASHBOARD_DB_PASSWORD" in *[!A-Za-z0-9_-]*) fail "DASHBOARD_DB_PASSWORD must use only URL-safe A-Z, a-z, 0-9, _ and -" ;; esac
   case "$CLOUDFLARE_TUNNEL_TOKEN" in replace-with-*|example-*|changeme|CHANGE_ME) fail "CLOUDFLARE_TUNNEL_TOKEN is still an example value" ;; esac
@@ -90,6 +92,7 @@ fi
 pass "all expected paper/shadow services are present"
 
 if [ "$WITH_DASHBOARD" -eq 1 ]; then
+  # Rendered JSON contains interpolated secrets; keep it in the pipe only.
   # shellcheck disable=SC2086
   docker compose $BASE_ARGS -f deploy/compose.dashboard-tunnel.yml --profile forward --profile solana --profile dashboard config --format json |
     python3 -c '
@@ -97,6 +100,10 @@ import json, sys
 services=json.load(sys.stdin).get("services", {})
 def fail(msg): raise SystemExit("PRECHECK FAILED: "+msg)
 def ports(name): return services.get(name, {}).get("ports") or []
+def networks(name):
+    value=services.get(name, {}).get("networks") or {}
+    return set(value.keys()) if isinstance(value, dict) else set(value)
+
 for name in ("postgres","redis","dashboard","cloudflared"):
     if ports(name): fail(name+" has a published host port")
 api_ports=ports("api")
@@ -104,22 +111,43 @@ if len(api_ports)!=1: fail("API must have exactly one loopback host binding")
 p=api_ports[0]
 if str(p.get("host_ip") or "")!="127.0.0.1": fail("API host binding is not 127.0.0.1")
 if str(p.get("published"))!="8000" or str(p.get("target"))!="8000": fail("API loopback port must be 8000:8000")
+
 for name in ("api","dashboard","hyperliquid-forward-runner","polymarket-forward-runner","solana-forward-runner","forward-evaluator"):
     env=services.get(name,{}).get("environment") or {}
     if str(env.get("SIGNER_ENABLED","")).lower()!="false": fail(name+" does not force SIGNER_ENABLED=false")
-dash_env=services.get("dashboard",{}).get("environment") or {}
+
+dash=services.get("dashboard", {})
+dash_env=dash.get("environment") or {}
+if set(dash_env)!={"DATABASE_URL","SIGNER_ENABLED"}: fail("dashboard receives unexpected environment variables")
 if not str(dash_env.get("DATABASE_URL","")).startswith("postgresql+psycopg://edge_dashboard:"):
     fail("dashboard does not use edge_dashboard database role")
-for forbidden in ("POSTGRES_PASSWORD","HELIUS_API_KEY","JUPITER_API_KEY","GOPLUS_ACCESS_TOKEN","FORWARD_INGEST_SECRET"):
-    if forbidden in dash_env: fail("dashboard unexpectedly receives "+forbidden)
-cf_env=services.get("cloudflared",{}).get("environment") or {}
+if not str(dash_env.get("DATABASE_URL","")).endswith("@postgres:5432/edge"):
+    fail("dashboard database URL targets an unexpected database")
+
+dash_networks=networks("dashboard")
+if "dashboard_edge" not in dash_networks or "default" not in dash_networks:
+    fail("dashboard must bridge only the private database and dashboard_edge networks")
+
+role_command=str((services.get("dashboard-db-role", {}) or {}).get("command") or "")
+for table in (
+    "strategies","strategy_versions","strategy_evaluation_runs","forward_studies",
+    "forward_nav_observations","forward_study_incidents","forward_trade_records","forward_execution_records",
+):
+    if table not in role_command: fail("dashboard role grant is missing table: "+table)
+if "GRANT SELECT ON ALL TABLES" in role_command: fail("dashboard role grants SELECT on all tables")
+if "GRANT INSERT" in role_command or "GRANT UPDATE" in role_command or "GRANT DELETE" in role_command:
+    fail("dashboard role contains a write grant")
+if "default_transaction_read_only = on" not in role_command:
+    fail("dashboard role does not default transactions to read-only")
+
+cf=services.get("cloudflared", {})
+cf_env=cf.get("environment") or {}
+if set(cf_env)!={"TUNNEL_TOKEN"}: fail("cloudflared receives unexpected environment variables")
 if not cf_env.get("TUNNEL_TOKEN"): fail("cloudflared tunnel token is not injected")
-for forbidden in ("DATABASE_URL","POSTGRES_PASSWORD","DASHBOARD_DB_PASSWORD","HELIUS_API_KEY","JUPITER_API_KEY","GOPLUS_ACCESS_TOKEN"):
-    if forbidden in cf_env: fail("cloudflared unexpectedly receives "+forbidden)
-cf_networks=set((services.get("cloudflared",{}).get("networks") or {}).keys())
+cf_networks=networks("cloudflared")
 if cf_networks!={"dashboard_edge"}: fail("cloudflared must be isolated to dashboard_edge")
-dash_networks=set((services.get("dashboard",{}).get("networks") or {}).keys())
-if "dashboard_edge" not in dash_networks: fail("dashboard is not attached to dashboard_edge")
+if cf_networks & networks("api"): fail("cloudflared shares a Docker network with the research API")
+if not (cf_networks & dash_networks): fail("cloudflared cannot reach the dashboard service")
 '
 else
   # shellcheck disable=SC2086
