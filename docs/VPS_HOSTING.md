@@ -13,7 +13,7 @@ Browser
   -> Cloudflare Access (deny by default)
   -> Cloudflare Tunnel
   -> dashboard:8080 (read-only ASGI service)
-  -> PostgreSQL (read-only queries by application convention)
+  -> edge_dashboard PostgreSQL role (SELECT only)
 
 VPS-only:
   127.0.0.1:8000 -> internal Edge Lab API
@@ -21,6 +21,8 @@ VPS-only:
   redis           -> no host port
   workers         -> no host port
 ```
+
+The hosted launcher creates/rotates a dedicated `edge_dashboard` PostgreSQL login, grants only CONNECT/USAGE/SELECT, and gives future tables SELECT through default privileges. The dashboard never receives the main `edge` database password.
 
 The owner vault remains outside the VPS. `SIGNER_ENABLED=false` is forced by the launchers. No wallet or signing credential is required for hosted dashboard mode.
 
@@ -32,19 +34,16 @@ Use a remotely-managed Cloudflare Tunnel.
 2. Create an **Allow** policy only for the owner's identity. Access is deny-by-default when no Allow policy matches.
 3. Prefer a strong identity provider and MFA.
 4. Create a remotely-managed Cloudflare Tunnel.
-5. Add a published application route for the protected hostname with service URL:
+5. Add a published application route for the protected hostname with service URL `http://dashboard:8080`.
+6. Do **not** route the tunnel to `api:8000`.
+7. Enable **Protect with Access** for the tunnel route when available so `cloudflared` validates the Access token at the origin boundary.
+8. Copy the connector token into uncommitted `deploy/.env.forward` as `CLOUDFLARE_TUNNEL_TOKEN`.
 
-   `http://dashboard:8080`
-
-   Do **not** route the tunnel to `api:8000`.
-6. Enable **Protect with Access** for the tunnel route when available so `cloudflared` validates the Access token at the origin boundary.
-7. Copy the tunnel connector token into `deploy/.env.forward` as `CLOUDFLARE_TUNNEL_TOKEN`. Never commit the token.
-
-Cloudflare's Docker connector command uses `cloudflare/cloudflared:latest tunnel --no-autoupdate run --token ...`; Edge Lab wraps that pattern in `deploy/compose.hosted.yml`.
+The Docker connector follows Cloudflare's remotely-managed tunnel pattern: `cloudflare/cloudflared:latest tunnel --no-autoupdate run --token ...`.
 
 ## VPS preparation
 
-Minimum starting target remains approximately 4 vCPU, 8 GB RAM and 100+ GB NVMe. Install Docker Engine and the Docker Compose plugin, clone the private repository, then:
+Initial target: approximately 4 vCPU, 8 GB RAM and 100+ GB NVMe. Install Docker Engine and the Docker Compose plugin, clone the private repository, then:
 
 ```sh
 cp deploy/.env.forward.example deploy/.env.forward
@@ -55,6 +54,7 @@ Populate at least:
 
 - `POSTGRES_PASSWORD`
 - `FORWARD_INGEST_SECRET`
+- `DASHBOARD_DB_PASSWORD` — a separate random value, at least 24 characters
 - `HELIUS_API_KEY`
 - `JUPITER_API_KEY`
 - `CLOUDFLARE_TUNNEL_TOKEN`
@@ -67,9 +67,9 @@ GoPlus remains optional.
 sh deploy/start-hosted.sh
 ```
 
-The launcher first starts the hardened forward-research stack, then starts the isolated dashboard and Cloudflare Tunnel. The internal API remains bound to `127.0.0.1:8000`; the dashboard container has no host port and is reached only over the Docker network by `cloudflared`.
+The launcher starts the hardened forward-research stack, creates/updates the SELECT-only dashboard database role, starts the isolated dashboard, and finally starts Cloudflare Tunnel. The internal API remains `127.0.0.1:8000`; the dashboard has no published host port.
 
-## Verify on the VPS
+## Verify
 
 ```sh
 docker compose \
@@ -81,25 +81,19 @@ docker compose \
   --profile forward --profile solana ps
 ```
 
-Expected properties:
+Expected:
 
-- `postgres` and `redis` have no published ports;
-- `api` is only `127.0.0.1:8000`;
-- `dashboard` has no published host port;
-- `cloudflared` is healthy/running;
+- PostgreSQL/Redis have no published ports;
+- internal API is only `127.0.0.1:8000`;
+- dashboard has no host port;
+- cloudflared is running;
+- hosted dashboard uses `edge_dashboard`, not the admin DB role;
 - all forward services keep `SIGNER_ENABLED=false`.
 
-From the public Internet, the protected hostname should require Cloudflare Access authentication before the dashboard loads.
+From the Internet, the hostname must require Cloudflare Access authentication before the dashboard loads.
 
 ## Operational boundary
 
-Dashboard V1 is observation-only. It can display aggregate research NAV, strategy evidence, paper/shadow trades and incidents. It cannot:
+Dashboard V1 can display research NAV, strategy evidence, paper/shadow trades and incidents. It cannot submit orders/swaps, enable signing, move/bridge funds, access the owner vault, promote strategies, or mutate frozen evidence.
 
-- submit venue orders or swaps;
-- enable the signer;
-- move USDC or bridge assets;
-- reach the owner vault;
-- promote a strategy to live status;
-- mutate frozen forward evidence.
-
-Future safe controls should be implemented as separate authenticated operations with explicit audit records rather than broad access to the internal API.
+Future controls should be separate authenticated, audited operations rather than exposing the internal API.
