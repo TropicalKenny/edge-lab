@@ -7,10 +7,11 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.dashboard_api import router as dashboard_router
 from app.database import get_db
+from app.version import APP_VERSION
 
 app = FastAPI(
     title="Edge Lab Dashboard",
-    version="0.7.1",
+    version=APP_VERSION,
     description="Read-only hosted research dashboard. Internal trading/research APIs are not mounted.",
     docs_url=None,
     redoc_url=None,
