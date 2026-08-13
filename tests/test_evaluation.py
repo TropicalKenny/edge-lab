@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
+from fastapi import HTTPException
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
@@ -17,7 +18,7 @@ from app.evaluation import (
 )
 from app.evaluation_api import StrategyEvaluationRequest, evaluate_strategy
 from app.evaluation_models import StrategyEvaluationRun
-from app.models import Base, Strategy
+from app.models import Base, Strategy, StrategyVersion
 import app.evaluation_models  # register evaluation table for in-memory metadata
 
 D = Decimal
@@ -26,11 +27,19 @@ END = START + timedelta(days=100)
 
 
 def nav_series(drawdown: bool = False):
-    if drawdown:
-        values = [(0, "1000"), (30, "1100"), (60, "900"), (100, "1050")]
-    else:
-        values = [(0, "1000"), (30, "1020"), (60, "1015"), (100, "1040")]
-    return tuple(NavObservation(START + timedelta(days=day), D(value)) for day, value in values)
+    rows = []
+    for day in range(101):
+        if drawdown:
+            if day <= 30:
+                value = D("1000") + D(day) * D("100") / D("30")
+            elif day <= 60:
+                value = D("1100") - D(day - 30) * D("200") / D("30")
+            else:
+                value = D("900") + D(day - 60) * D("150") / D("40")
+        else:
+            value = D("1000") + D(day) * D("0.4")
+        rows.append(NavObservation(START + timedelta(days=day), value))
+    return tuple(rows)
 
 
 def profitable_trades(count: int = 60):
@@ -57,10 +66,10 @@ def profitable_trades(count: int = 60):
     return tuple(trades)
 
 
-def good_executions(count: int = 20):
+def good_executions(count: int = 30):
     return tuple(
         ExecutionComparison(
-            observed_at=START + timedelta(days=2 + i),
+            observed_at=START + timedelta(days=2 + (i % 90), minutes=i),
             side="buy" if i % 2 == 0 else "sell",
             intended_quantity=D("10"),
             paper_filled_quantity=D("10"),
@@ -108,6 +117,8 @@ def base_input(*, family="funding", trades=None, nav=None, executions=None, fore
 def relaxed_policy(**overrides):
     values = dict(
         min_forward_days=90,
+        min_nav_observations=60,
+        min_shadow_observations=30,
         min_trades_default=60,
         min_trades_funding=60,
         min_trades_directional=60,
@@ -129,12 +140,14 @@ def test_funding_strategy_can_only_become_green1_candidate_after_all_gates():
     result = EvidenceEvaluator(relaxed_policy()).evaluate(base_input())
     assert result.recommendation == "GREEN-1_CANDIDATE"
     assert result.reasons == ("ALL_PRE_REGISTERED_FORWARD_GATES_PASSED",)
+    assert result.performance.nav_observation_count == 101
     assert result.performance.trade_count == 60
     assert result.performance.net_pnl_usd == D("30")
     assert result.performance.stressed_net_pnl_usd == D("24.0")
     assert result.performance.profit_factor == D("2")
     assert result.performance.top3_profit_concentration == D("0.1")
-    assert result.performance.max_drawdown_pct < D("0.01")
+    assert result.performance.max_drawdown_pct == D("0")
+    assert result.execution.observation_count == 30
     assert result.execution.mean_shadow_fill_ratio == D("1")
     assert result.execution.p90_absolute_price_divergence_bps == D("10.0")
 
@@ -151,7 +164,9 @@ def test_insufficient_forward_days_is_amber():
         trades=tuple(x for x in profitable_trades(20) if x.closed_at <= end),
         executions=tuple(x for x in good_executions(10) if x.observed_at <= end),
     )
-    result = EvidenceEvaluator(relaxed_policy(min_trades_funding=10)).evaluate(evaluation)
+    result = EvidenceEvaluator(
+        relaxed_policy(min_nav_observations=20, min_shadow_observations=10, min_trades_funding=10)
+    ).evaluate(evaluation)
     assert result.recommendation == "AMBER"
     assert "INSUFFICIENT_FORWARD_DAYS" in result.reasons
 
@@ -187,6 +202,15 @@ def test_drawdown_above_gate_is_red():
     assert "MAX_DRAWDOWN_EXCEEDED" in result.reasons
 
 
+def test_tiny_nav_or_shadow_samples_cannot_be_green():
+    result = EvidenceEvaluator(relaxed_policy()).evaluate(
+        base_input(nav=nav_series()[:10], executions=good_executions(3))
+    )
+    assert result.recommendation == "AMBER"
+    assert "INSUFFICIENT_NAV_OBSERVATIONS" in result.reasons
+    assert "INSUFFICIENT_SHADOW_SAMPLE" in result.reasons
+
+
 def test_no_trades_and_no_nav_history_cannot_be_green():
     result = EvidenceEvaluator(relaxed_policy()).evaluate(base_input(trades=(), nav=()))
     assert result.recommendation == "AMBER"
@@ -216,7 +240,7 @@ def test_bad_shadow_execution_keeps_strategy_amber():
             paper_cost_usd=D("0.1"),
             shadow_cost_usd=D("0.5"),
         )
-        for i in range(20)
+        for i in range(30)
     )
     result = EvidenceEvaluator(relaxed_policy()).evaluate(base_input(executions=bad))
     assert result.recommendation == "AMBER"
@@ -247,9 +271,7 @@ def test_trade_pnl_must_reconcile_to_gross_minus_costs():
 
 def test_prediction_strategy_needs_calibration_and_complete_market_baseline():
     forecasts = calibrated_forecasts()
-    good = EvidenceEvaluator(relaxed_policy()).evaluate(
-        base_input(family="prediction", forecasts=forecasts)
-    )
+    good = EvidenceEvaluator(relaxed_policy()).evaluate(base_input(family="prediction", forecasts=forecasts))
     assert good.prediction.forecast_count == 50
     assert good.prediction.calibration_error == D("0.0")
     assert good.prediction.brier_score == D("0.16")
@@ -268,15 +290,8 @@ def test_prediction_strategy_needs_calibration_and_complete_market_baseline():
     assert amber.prediction.market_brier_score is None
 
 
-def test_evaluation_api_persists_evidence_without_mutating_strategy_status():
-    engine = create_engine("sqlite:///:memory:")
-    Base.metadata.create_all(engine)
-    db = Session(engine)
-    strategy = Strategy(slug="strategy-a", name="Strategy A", status="red")
-    db.add(strategy)
-    db.commit()
-
-    request = StrategyEvaluationRequest.model_validate(
+def registered_request():
+    return StrategyEvaluationRequest.model_validate(
         {
             "strategy_slug": "strategy-a",
             "strategy_version": "v1",
@@ -312,11 +327,34 @@ def test_evaluation_api_persists_evidence_without_mutating_strategy_status():
             ],
         }
     )
+
+
+def test_evaluation_api_requires_registered_version_and_never_mutates_strategy_status():
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    db = Session(engine)
+    request = registered_request()
+
+    with pytest.raises(HTTPException) as missing_strategy:
+        evaluate_strategy(request, db)
+    assert missing_strategy.value.status_code == 422
+
+    strategy = Strategy(slug="strategy-a", name="Strategy A", status="red")
+    db.add(strategy)
+    db.commit()
+    with pytest.raises(HTTPException) as missing_version:
+        evaluate_strategy(request, db)
+    assert missing_version.value.status_code == 422
+
+    version = StrategyVersion(strategy_id=strategy.id, version="v1", config_json="{}", immutable=True)
+    db.add(version)
+    db.commit()
     response = evaluate_strategy(request, db)
     stored = db.scalar(select(StrategyEvaluationRun).where(StrategyEvaluationRun.external_run_id == response["run_id"]))
     db.refresh(strategy)
     assert stored is not None
-    assert stored.recommendation in {"AMBER", "GREEN-1_CANDIDATE"}
+    assert stored.strategy_version_id == version.id
+    assert stored.recommendation == "GREEN-1_CANDIDATE"
     assert strategy.status == "red"
     assert response["safety"]["recommendation_only"] is True
     assert response["safety"]["can_promote_strategy"] is False
