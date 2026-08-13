@@ -25,6 +25,10 @@ def db_session() -> Session:
     return Session(engine)
 
 
+def aware(value: datetime) -> datetime:
+    return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+
+
 def study(db: Session, *, external_id: str = "study-1") -> ForwardStudy:
     now = datetime.now(timezone.utc) - timedelta(days=1)
     row = ForwardStudy(
@@ -205,5 +209,5 @@ def test_telegram_failure_retries_without_touching_research_state():
     assert row is not None
     assert row.status == "retry"
     assert row.attempt_count == 1
-    assert row.next_attempt_at >= now + timedelta(seconds=60)
+    assert aware(row.next_attempt_at) >= now + timedelta(seconds=60)
     assert db.get(ForwardStudy, s.id).status == "active"
