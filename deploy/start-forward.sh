@@ -9,6 +9,10 @@ if [ ! -f "$ENV_FILE" ]; then
   exit 1
 fi
 
+# Normal launches cannot bypass the deployment gate. The research-only preflight
+# still validates the isolated local dashboard but does not require a tunnel token.
+sh deploy/preflight-forward.sh --research-only
+
 set -a
 # shellcheck disable=SC1090
 . "$ENV_FILE"
