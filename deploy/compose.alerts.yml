@@ -1,0 +1,22 @@
+services:
+  telegram-alerts:
+    profiles: ["alerts"]
+    build: .
+    command: ["python", "-m", "app.workers.owner_alerts"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://edge:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/edge
+      SIGNER_ENABLED: "false"
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?set TELEGRAM_BOT_TOKEN}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:?set TELEGRAM_CHAT_ID}
+      TELEGRAM_ALERT_POLL_SECONDS: ${TELEGRAM_ALERT_POLL_SECONDS:-60}
+      TELEGRAM_ALERT_MAX_ATTEMPTS: ${TELEGRAM_ALERT_MAX_ATTEMPTS:-6}
+      TELEGRAM_ALERT_RETRY_BASE_SECONDS: ${TELEGRAM_ALERT_RETRY_BASE_SECONDS:-60}
+      TELEGRAM_ALERT_RETRY_MAX_SECONDS: ${TELEGRAM_ALERT_RETRY_MAX_SECONDS:-3600}
+      TELEGRAM_ALERT_BATCH_SIZE: ${TELEGRAM_ALERT_BATCH_SIZE:-20}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    ports: []
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
