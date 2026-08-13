@@ -139,7 +139,7 @@ def test_dashboard_summary_is_read_only_and_aggregates_research_state():
             "can_move_funds": False,
             "vault_accessible": False,
             "signer_enabled": False,
-            "live_capital_usd": "0",
+            "live_capital_usd": 0,
         }
         assert payload["portfolio"]["label"] == "aggregate simulated research capital"
         assert payload["portfolio"]["study_count"] == 1
