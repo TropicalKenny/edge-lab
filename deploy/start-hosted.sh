@@ -32,13 +32,22 @@ if [ "$DASHBOARD_DB_PASSWORD" = "$POSTGRES_PASSWORD" ] || [ ${#DASHBOARD_DB_PASS
   exit 1
 fi
 
+case "$DASHBOARD_DB_PASSWORD" in
+  *[!A-Za-z0-9_-]*)
+    echo "Dashboard DB password must use only URL-safe A-Z, a-z, 0-9, _ and - characters." >&2
+    exit 1
+    ;;
+esac
+
+case "$CLOUDFLARE_TUNNEL_TOKEN" in
+  replace-with-*|example-*|changeme|CHANGE_ME)
+    echo "Refusing to start with an example Cloudflare Tunnel token." >&2
+    exit 1
+    ;;
+esac
+
 if [ "${SIGNER_ENABLED:-false}" != "false" ]; then
   echo "Refusing hosted research deployment with SIGNER_ENABLED != false." >&2
-  exit 1
-fi
-
-if [ "${CLOUDFLARE_TUNNEL_TOKEN}" = "replace-with-cloudflare-tunnel-token" ]; then
-  echo "Refusing to start with an example tunnel token." >&2
   exit 1
 fi
 
