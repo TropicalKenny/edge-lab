@@ -25,6 +25,7 @@ from app.evaluation import (
     TradeOutcome,
 )
 from app.evaluation_models import StrategyEvaluationRun
+from app.models import Strategy, StrategyVersion
 
 router = APIRouter(prefix="/evaluation", tags=["forward-evidence"])
 settings = get_settings()
@@ -81,6 +82,8 @@ class StrategyEvaluationRequest(BaseModel):
 def evaluation_policy() -> EvaluationPolicy:
     return EvaluationPolicy(
         min_forward_days=settings.evaluation_min_forward_days,
+        min_nav_observations=settings.evaluation_min_nav_observations,
+        min_shadow_observations=settings.evaluation_min_shadow_observations,
         min_trades_default=settings.evaluation_min_trades_default,
         min_trades_funding=settings.evaluation_min_trades_funding,
         min_trades_directional=settings.evaluation_min_trades_directional,
@@ -116,7 +119,31 @@ def _json(value) -> str:
     return json.dumps(value, default=str, separators=(",", ":"), sort_keys=True)
 
 
-def _persist(db: Session, run_id: str, request: StrategyEvaluationRequest, result, policy: EvaluationPolicy) -> None:
+def _registered_version(db: Session, request: StrategyEvaluationRequest) -> StrategyVersion:
+    strategy = db.scalar(select(Strategy).where(Strategy.slug == request.strategy_slug))
+    if strategy is None:
+        raise EvaluationError("strategy must be registered before forward evaluation")
+    version = db.scalar(
+        select(StrategyVersion).where(
+            StrategyVersion.strategy_id == strategy.id,
+            StrategyVersion.version == request.strategy_version,
+        )
+    )
+    if version is None:
+        raise EvaluationError("strategy version must be registered before forward evaluation")
+    if not version.immutable:
+        raise EvaluationError("strategy version must be immutable before forward evaluation")
+    return version
+
+
+def _persist(
+    db: Session,
+    run_id: str,
+    request: StrategyEvaluationRequest,
+    result,
+    policy: EvaluationPolicy,
+    registered_version: StrategyVersion,
+) -> None:
     metrics = {
         "performance": asdict(result.performance),
         "execution": asdict(result.execution),
@@ -125,6 +152,7 @@ def _persist(db: Session, run_id: str, request: StrategyEvaluationRequest, resul
     db.add(
         StrategyEvaluationRun(
             external_run_id=run_id,
+            strategy_version_id=registered_version.id,
             strategy_slug=request.strategy_slug,
             strategy_version=request.strategy_version,
             family=request.family,
@@ -157,8 +185,9 @@ def evaluate_strategy(request: StrategyEvaluationRequest, db: Session = Depends(
     evaluator = EvidenceEvaluator(policy)
     run_id = str(uuid.uuid4())
     try:
+        registered_version = _registered_version(db, request)
         result = evaluator.evaluate(_domain(request))
-        _persist(db, run_id, request, result, policy)
+        _persist(db, run_id, request, result, policy, registered_version)
     except EvaluationError as exc:
         db.rollback()
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -195,4 +224,6 @@ def evaluation_status():
         "can_enable_signer": False,
         "can_authorize_capital": False,
         "minimum_forward_days": settings.evaluation_min_forward_days,
+        "minimum_nav_observations": settings.evaluation_min_nav_observations,
+        "minimum_shadow_observations": settings.evaluation_min_shadow_observations,
     }
