@@ -3,10 +3,10 @@ set -eu
 
 cd "$(dirname "$0")/.."
 ENV_FILE="deploy/.env.forward"
-WITH_DASHBOARD=1
+WITH_TUNNEL=1
 
 if [ "${1:-}" = "--research-only" ]; then
-  WITH_DASHBOARD=0
+  WITH_TUNNEL=0
 elif [ -n "${1:-}" ]; then
   echo "Usage: sh deploy/preflight-forward.sh [--research-only]" >&2
   exit 2
@@ -48,6 +48,7 @@ set +a
 
 : "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}"
 : "${FORWARD_INGEST_SECRET:?FORWARD_INGEST_SECRET is required}"
+: "${DASHBOARD_DB_PASSWORD:?DASHBOARD_DB_PASSWORD is required for the read-only dashboard}"
 : "${HELIUS_API_KEY:?HELIUS_API_KEY is required for Solana research}"
 : "${JUPITER_API_KEY:?JUPITER_API_KEY is required for quote-only Solana research}"
 
@@ -60,11 +61,17 @@ esac
 case "$FORWARD_INGEST_SECRET" in
   replace-with-*|example-*|changeme|CHANGE_ME) fail "FORWARD_INGEST_SECRET is still an example value" ;;
 esac
+case "$DASHBOARD_DB_PASSWORD" in
+  replace-with-*|example-*|changeme|CHANGE_ME) fail "DASHBOARD_DB_PASSWORD is still an example value" ;;
+esac
 
 [ "${#POSTGRES_PASSWORD}" -ge 24 ] || fail "POSTGRES_PASSWORD must be at least 24 characters"
 [ "${#FORWARD_INGEST_SECRET}" -ge 32 ] || fail "FORWARD_INGEST_SECRET must be at least 32 characters"
+[ "${#DASHBOARD_DB_PASSWORD}" -ge 24 ] || fail "DASHBOARD_DB_PASSWORD must be at least 24 characters"
+[ "$DASHBOARD_DB_PASSWORD" != "$POSTGRES_PASSWORD" ] || fail "DASHBOARD_DB_PASSWORD must differ from POSTGRES_PASSWORD"
+[ "$DASHBOARD_DB_PASSWORD" != "$FORWARD_INGEST_SECRET" ] || fail "DASHBOARD_DB_PASSWORD must differ from FORWARD_INGEST_SECRET"
 
-if [ "$WITH_DASHBOARD" -eq 1 ]; then
+if [ "$WITH_TUNNEL" -eq 1 ]; then
   : "${CLOUDFLARE_TUNNEL_TOKEN:?CLOUDFLARE_TUNNEL_TOKEN is required for dashboard preflight}"
   case "$CLOUDFLARE_TUNNEL_TOKEN" in
     replace-with-*|example-*|changeme|CHANGE_ME) fail "CLOUDFLARE_TUNNEL_TOKEN is still an example value" ;;
@@ -79,22 +86,21 @@ mkdir -p deploy/backups
 chmod 700 deploy/backups
 pass "real environment and backup directory are protected from Git tracking"
 
-BASE_ARGS="--env-file $ENV_FILE -f docker-compose.yml -f deploy/compose.forward.yml -f deploy/compose.solana-forward.yml"
-if [ "$WITH_DASHBOARD" -eq 1 ]; then
-  # shellcheck disable=SC2086
-  docker compose $BASE_ARGS -f deploy/compose.dashboard-tunnel.yml --profile forward --profile solana --profile dashboard config -q
-  # shellcheck disable=SC2086
-  services=$(docker compose $BASE_ARGS -f deploy/compose.dashboard-tunnel.yml --profile forward --profile solana --profile dashboard config --services)
+BASE_ARGS="--env-file $ENV_FILE -f docker-compose.yml -f deploy/compose.forward.yml -f deploy/compose.solana-forward.yml -f deploy/compose.dashboard.yml"
+if [ "$WITH_TUNNEL" -eq 1 ]; then
+  EXTRA_ARGS="-f deploy/compose.dashboard-tunnel.yml --profile dashboard"
 else
-  # shellcheck disable=SC2086
-  docker compose $BASE_ARGS --profile forward --profile solana config -q
-  # shellcheck disable=SC2086
-  services=$(docker compose $BASE_ARGS --profile forward --profile solana config --services)
+  EXTRA_ARGS=""
 fi
+
+# shellcheck disable=SC2086
+docker compose $BASE_ARGS $EXTRA_ARGS --profile forward --profile solana config -q
+# shellcheck disable=SC2086
+services=$(docker compose $BASE_ARGS $EXTRA_ARGS --profile forward --profile solana config --services)
 pass "Docker Compose configuration renders successfully"
 
 for service in \
-  postgres redis migrate api \
+  postgres redis migrate api dashboard-db-role dashboard \
   hyperliquid-collector hyperliquid-forward-bootstrap hyperliquid-forward-runner \
   polymarket-collector polymarket-forward-bootstrap polymarket-forward-runner \
   solana-launch-collector solana-forensic-sampler solana-forward-bootstrap solana-forward-runner \
@@ -102,20 +108,20 @@ for service in \
 do
   printf '%s\n' "$services" | grep -Fxq "$service" || fail "rendered Compose stack is missing service: $service"
 done
-if [ "$WITH_DASHBOARD" -eq 1 ]; then
+if [ "$WITH_TUNNEL" -eq 1 ]; then
   printf '%s\n' "$services" | grep -Fxq cloudflared || fail "rendered Compose stack is missing cloudflared"
 fi
-pass "all expected paper/shadow services are present"
+pass "all expected paper/shadow and dashboard services are present"
 
-export EDGE_PREFLIGHT_WITH_DASHBOARD="$WITH_DASHBOARD"
-if [ "$WITH_DASHBOARD" -eq 1 ]; then
-  # The rendered configuration contains secrets; keep it only in the pipe and never write it to disk/stdout.
-  # shellcheck disable=SC2086
-  docker compose $BASE_ARGS -f deploy/compose.dashboard-tunnel.yml --profile forward --profile solana --profile dashboard config --format json |
-    python3 -c '
+export EDGE_PREFLIGHT_WITH_TUNNEL="$WITH_TUNNEL"
+# The rendered configuration contains secrets; keep it only in the pipe and never write it to disk/stdout.
+# shellcheck disable=SC2086
+docker compose $BASE_ARGS $EXTRA_ARGS --profile forward --profile solana config --format json |
+  python3 -c '
 import json, os, sys
 cfg=json.load(sys.stdin)
 services=cfg.get("services", {})
+with_tunnel=os.environ.get("EDGE_PREFLIGHT_WITH_TUNNEL") == "1"
 
 def fail(msg):
     raise SystemExit("PRECHECK FAILED: "+msg)
@@ -123,44 +129,48 @@ def fail(msg):
 def ports(name):
     return services.get(name, {}).get("ports") or []
 
-if ports("postgres"): fail("PostgreSQL has a published host port")
-if ports("redis"): fail("Redis has a published host port")
-if ports("cloudflared"): fail("cloudflared has a published host port")
-api_ports=ports("api")
-if len(api_ports)!=1: fail("API must have exactly one loopback host binding")
-p=api_ports[0]
-host_ip=str(p.get("host_ip") or p.get("host_ip", ""))
-if host_ip!="127.0.0.1": fail("API host binding is not 127.0.0.1")
-if str(p.get("published"))!="8000" or str(p.get("target"))!="8000": fail("API loopback port must be 8000:8000")
-for name in ("api","hyperliquid-forward-runner","polymarket-forward-runner","solana-forward-runner","forward-evaluator"):
-    env=services.get(name,{}).get("environment") or {}
-    if str(env.get("SIGNER_ENABLED","")).lower()!="false": fail(name+" does not force SIGNER_ENABLED=false")
-cf_env=services.get("cloudflared",{}).get("environment") or {}
-if not cf_env.get("TUNNEL_TOKEN"): fail("cloudflared tunnel token is not injected")
-for forbidden in ("DATABASE_URL","POSTGRES_PASSWORD","HELIUS_API_KEY","JUPITER_API_KEY","GOPLUS_ACCESS_TOKEN"):
-    if forbidden in cf_env: fail("cloudflared unexpectedly receives "+forbidden)
-'
-else
-  # shellcheck disable=SC2086
-  docker compose $BASE_ARGS --profile forward --profile solana config --format json |
-    python3 -c '
-import json, sys
-cfg=json.load(sys.stdin); services=cfg.get("services", {})
-def fail(msg): raise SystemExit("PRECHECK FAILED: "+msg)
-def ports(name): return services.get(name, {}).get("ports") or []
-if ports("postgres"): fail("PostgreSQL has a published host port")
-if ports("redis"): fail("Redis has a published host port")
-api_ports=ports("api")
-if len(api_ports)!=1 or str(api_ports[0].get("host_ip") or "")!="127.0.0.1": fail("API is not loopback-only")
-for name in ("api","hyperliquid-forward-runner","polymarket-forward-runner","solana-forward-runner","forward-evaluator"):
-    env=services.get(name,{}).get("environment") or {}
-    if str(env.get("SIGNER_ENABLED","")).lower()!="false": fail(name+" does not force SIGNER_ENABLED=false")
-'
-fi
-pass "rendered network and signer boundaries are fail-closed"
+def one_loopback(name, published, target):
+    values=ports(name)
+    if len(values)!=1:
+        fail(name+" must have exactly one loopback host binding")
+    p=values[0]
+    if str(p.get("host_ip") or "")!="127.0.0.1":
+        fail(name+" host binding is not 127.0.0.1")
+    if str(p.get("published"))!=str(published) or str(p.get("target"))!=str(target):
+        fail(name+" loopback port is incorrect")
 
-if [ "$WITH_DASHBOARD" -eq 1 ]; then
-  echo "READY: paper/shadow research + authenticated dashboard deployment preflight passed"
+if ports("postgres"): fail("PostgreSQL has a published host port")
+if ports("redis"): fail("Redis has a published host port")
+one_loopback("api", 8000, 8000)
+one_loopback("dashboard", 8080, 8080)
+
+for name in ("api","dashboard","hyperliquid-forward-runner","polymarket-forward-runner","solana-forward-runner","forward-evaluator"):
+    env=services.get(name,{}).get("environment") or {}
+    if str(env.get("SIGNER_ENABLED","")).lower()!="false": fail(name+" does not force SIGNER_ENABLED=false")
+
+dashboard=services.get("dashboard", {})
+db_url=str((dashboard.get("environment") or {}).get("DATABASE_URL") or "")
+if "edge_dashboard:" not in db_url:
+    fail("dashboard does not use the dedicated edge_dashboard database login")
+for forbidden in ("FORWARD_INGEST_SECRET","HELIUS_API_KEY","JUPITER_API_KEY","GOPLUS_ACCESS_TOKEN"):
+    if forbidden in (dashboard.get("environment") or {}):
+        fail("dashboard unexpectedly receives "+forbidden)
+
+if with_tunnel:
+    if ports("cloudflared"): fail("cloudflared has a published host port")
+    cf=services.get("cloudflared", {})
+    cf_env=cf.get("environment") or {}
+    if not cf_env.get("TUNNEL_TOKEN"): fail("cloudflared tunnel token is not injected")
+    for forbidden in ("DATABASE_URL","POSTGRES_PASSWORD","DASHBOARD_DB_PASSWORD","FORWARD_INGEST_SECRET","HELIUS_API_KEY","JUPITER_API_KEY","GOPLUS_ACCESS_TOKEN"):
+        if forbidden in cf_env: fail("cloudflared unexpectedly receives "+forbidden)
+    depends=cf.get("depends_on") or {}
+    if "dashboard" not in depends: fail("cloudflared does not depend on the isolated dashboard service")
+    if "api" in depends: fail("cloudflared must not depend on the research API")
+'
+pass "rendered network, dashboard database and signer boundaries are fail-closed"
+
+if [ "$WITH_TUNNEL" -eq 1 ]; then
+  echo "READY: paper/shadow research + isolated authenticated dashboard deployment preflight passed"
 else
-  echo "READY: paper/shadow research deployment preflight passed (dashboard skipped)"
+  echo "READY: paper/shadow research + local read-only dashboard preflight passed (tunnel skipped)"
 fi

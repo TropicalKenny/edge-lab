@@ -3,12 +3,12 @@ set -eu
 
 cd "$(dirname "$0")/.."
 ENV_FILE="deploy/.env.forward"
-WITH_DASHBOARD=0
+WITH_TUNNEL=0
 STRICT=0
 
 for arg in "$@"; do
   case "$arg" in
-    --with-dashboard) WITH_DASHBOARD=1 ;;
+    --with-dashboard) WITH_TUNNEL=1 ;;
     --strict) STRICT=1 ;;
     *) echo "Usage: sh deploy/verify-forward.sh [--with-dashboard] [--strict]" >&2; exit 2 ;;
   esac
@@ -33,11 +33,12 @@ set -a
 . "$ENV_FILE"
 set +a
 
+: "${DASHBOARD_DB_PASSWORD:?DASHBOARD_DB_PASSWORD is required}"
 [ "${SIGNER_ENABLED:-false}" = "false" ] || fail "SIGNER_ENABLED must remain false"
 export SIGNER_ENABLED=false
 
-BASE_ARGS="--env-file $ENV_FILE -f docker-compose.yml -f deploy/compose.forward.yml -f deploy/compose.solana-forward.yml"
-if [ "$WITH_DASHBOARD" -eq 1 ]; then
+BASE_ARGS="--env-file $ENV_FILE -f docker-compose.yml -f deploy/compose.forward.yml -f deploy/compose.solana-forward.yml -f deploy/compose.dashboard.yml"
+if [ "$WITH_TUNNEL" -eq 1 ]; then
   : "${CLOUDFLARE_TUNNEL_TOKEN:?CLOUDFLARE_TUNNEL_TOKEN is required with --with-dashboard}"
   EXTRA_ARGS="-f deploy/compose.dashboard-tunnel.yml --profile dashboard"
 else
@@ -48,7 +49,7 @@ fi
 running=$(docker compose $BASE_ARGS $EXTRA_ARGS --profile forward --profile solana ps --status running --services)
 
 for service in \
-  postgres redis api \
+  postgres redis api dashboard \
   hyperliquid-collector hyperliquid-forward-runner \
   polymarket-collector polymarket-forward-runner \
   solana-launch-collector solana-forensic-sampler solana-forward-runner \
@@ -56,17 +57,22 @@ for service in \
 do
   printf '%s\n' "$running" | grep -Fxq "$service" || fail "service is not running: $service"
 done
-if [ "$WITH_DASHBOARD" -eq 1 ]; then
+if [ "$WITH_TUNNEL" -eq 1 ]; then
   printf '%s\n' "$running" | grep -Fxq cloudflared || fail "cloudflared is not running"
 fi
-pass "expected long-running research services are running"
+pass "expected long-running research and dashboard services are running"
 
-curl -fsS --max-time 10 http://127.0.0.1:8000/dashboard >/dev/null || fail "local dashboard route is unavailable"
-curl -fsS --max-time 10 http://127.0.0.1:8000/dashboard/assets/dashboard.css >/dev/null || fail "dashboard CSS asset is unavailable"
-curl -fsS --max-time 10 http://127.0.0.1:8000/dashboard/assets/dashboard.js >/dev/null || fail "dashboard JS asset is unavailable"
-pass "dashboard page and local assets respond on loopback"
+curl -fsS --max-time 10 http://127.0.0.1:8080/healthz >/dev/null || fail "isolated dashboard health endpoint is unavailable"
+curl -fsS --max-time 10 http://127.0.0.1:8080/dashboard >/dev/null || fail "isolated dashboard route is unavailable"
+curl -fsS --max-time 10 http://127.0.0.1:8080/dashboard/assets/dashboard.css >/dev/null || fail "dashboard CSS asset is unavailable"
+curl -fsS --max-time 10 http://127.0.0.1:8080/dashboard/assets/dashboard.js >/dev/null || fail "dashboard JS asset is unavailable"
+pass "isolated dashboard page, health and local assets respond on loopback"
 
-curl -fsS --max-time 10 http://127.0.0.1:8000/dashboard/api/summary |
+internal_status=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 http://127.0.0.1:8080/forward/ops/studies || true)
+[ "$internal_status" = "404" ] || fail "isolated dashboard unexpectedly exposes an internal forward route"
+pass "dashboard gateway does not expose internal research routes"
+
+curl -fsS --max-time 10 http://127.0.0.1:8080/dashboard/api/summary |
   python3 -c '
 import json, sys
 payload=json.load(sys.stdin)
@@ -106,8 +112,8 @@ if [ "$STRICT" -eq 1 ]; then
   pass "all three frozen forward studies report ready"
 fi
 
-if [ "$WITH_DASHBOARD" -eq 1 ]; then
-  echo "VERIFIED: research stack and private dashboard tunnel are running safely"
+if [ "$WITH_TUNNEL" -eq 1 ]; then
+  echo "VERIFIED: research stack and isolated private dashboard tunnel are running safely"
 else
-  echo "VERIFIED: research stack is running safely"
+  echo "VERIFIED: research stack and isolated local dashboard are running safely"
 fi
