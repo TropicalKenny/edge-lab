@@ -23,14 +23,14 @@ def _session():
 
 
 def _seed(db: Session):
-    strategy = Strategy(slug="ops-test", name="Ops Test", family="funding", status="RED")
+    strategy = Strategy(slug="ops-test", name="Ops Test", status="red")
     db.add(strategy)
     db.flush()
     version = StrategyVersion(
         strategy_id=strategy.id,
         version="v1",
         config_json="{}",
-        code_ref="test",
+        code_sha="test",
         immutable=True,
     )
     db.add(version)
@@ -38,10 +38,12 @@ def _seed(db: Session):
     experiment = Experiment(
         strategy_version_id=version.id,
         hypothesis="ops",
-        status="running",
         data_version="test",
-        parameter_space_json="{}",
-        cost_assumptions_json="{}",
+        train_window="forward-only",
+        validation_window="forward-only",
+        holdout_window="forward-only",
+        search_space_json="{}",
+        status="running",
     )
     db.add(experiment)
     db.flush()
@@ -104,7 +106,7 @@ def test_forward_ops_summary_is_read_only_and_surfaces_contamination():
         assert len(payload["studies"]) == 1
         row = payload["studies"][0]
         assert row["study_id"] == study.id
-        assert row["latest_nav_usd"] == "1005.0000000000"
+        assert Decimal(row["latest_nav_usd"]) == Decimal("1005")
         assert row["unresolved_data_integrity_incidents"] == 1
         assert row["contaminated"] is True
     finally:
