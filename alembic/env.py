@@ -9,6 +9,7 @@ import app.venues.solana_models  # register extension tables in Base.metadata
 import app.portfolio_models  # register portfolio audit tables in Base.metadata
 import app.evaluation_models  # register strategy evidence audit table in Base.metadata
 import app.forward_models  # register frozen forward research journal tables in Base.metadata
+import app.hyperliquid_forward_models  # register Hyperliquid forward position state
 config=context.config; config.set_main_option('sqlalchemy.url',get_settings().database_url)
 if config.config_file_name: fileConfig(config.config_file_name)
 target_metadata=Base.metadata
