@@ -35,7 +35,7 @@ A responsive read-only research terminal is served by FastAPI:
 
 It shows study NAV, research P&L, evidence state, forward progress, paper trades, shadow observations and incidents. It explicitly reports that live trading, signing, fund movement and vault access are disabled.
 
-For VPS access, Dashboard V1 is designed to sit behind an owner-only **Cloudflare Access + Cloudflare Tunnel** route. PostgreSQL, Redis, workers and future signer services remain private.
+For VPS access, Dashboard V1 sits behind an owner-only **Cloudflare Access + Cloudflare Tunnel** route. PostgreSQL, Redis, workers and future signer services remain private.
 
 ## Local development
 
@@ -48,11 +48,15 @@ API: `http://localhost:8000`
 
 Dashboard: `http://localhost:8000/dashboard`
 
-Run tests:
+The repository verification gate is:
 
 ```sh
-python -m pytest
+sh scripts/verify-repo.sh
 ```
+
+It runs the complete pytest suite, Python compilation, a fresh Alembic migration and—when Docker Compose is available—the full research/dashboard/alert Compose render. It also includes API-contract tests that reject duplicate FastAPI route/method registrations and duplicate OpenAPI operation IDs.
+
+GitHub Actions is intentionally not the repository gate at present; do not treat the absence of a GitHub check as validation.
 
 ## VPS paper/shadow deployment
 
