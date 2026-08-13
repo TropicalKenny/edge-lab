@@ -108,6 +108,8 @@ class Settings(BaseSettings):
     forward_ingest_secret: str = ''
     forward_evaluation_poll_seconds: int = 3600
     forward_status_max_market_age_seconds: int = 900
+    dashboard_username: str = ''
+    dashboard_password: str = ''
 
 @lru_cache
 def get_settings() -> Settings:
