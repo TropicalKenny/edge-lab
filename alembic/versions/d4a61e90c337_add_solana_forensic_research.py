@@ -96,6 +96,8 @@ def upgrade() -> None:
         "solana_forward_labels",
         sa.Column("id", sa.String(36), nullable=False), sa.Column("mint", sa.String(64), nullable=False),
         sa.Column("launch_signature", sa.String(100), nullable=False), sa.Column("horizon_minutes", sa.Integer(), nullable=False),
+        sa.Column("entry_observed_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("observed_horizon_minutes", sa.Numeric(20,6), nullable=False),
         sa.Column("entry_price_usd", sa.Numeric(28,12), nullable=True), sa.Column("future_price_usd", sa.Numeric(28,12), nullable=True),
         sa.Column("return_pct", sa.Numeric(20,8), nullable=True), sa.Column("max_observed_liquidity_usd", sa.Numeric(28,8), nullable=True),
         sa.Column("exit_quote_available", sa.Boolean(), nullable=True), sa.Column("resolved_at", sa.DateTime(timezone=True), nullable=True),
