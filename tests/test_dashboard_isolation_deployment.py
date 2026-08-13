@@ -13,6 +13,9 @@ def test_dashboard_service_is_loopback_and_exact_table_select_only():
     assert "app.dashboard_server:app" in text
     assert "edge_dashboard:${DASHBOARD_DB_PASSWORD}@postgres:5432/edge" in text
     assert 'SIGNER_ENABLED: "false"' in text
+    assert "NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS" in text
+    assert "default_transaction_read_only = on" in text
+    assert "statement_timeout = '5s'" in text
     assert "REVOKE ALL ON ALL TABLES IN SCHEMA public FROM edge_dashboard" in text
     assert "GRANT SELECT ON ALL TABLES" not in text
     assert "ALTER DEFAULT PRIVILEGES FOR ROLE edge IN SCHEMA public REVOKE SELECT ON TABLES FROM edge_dashboard" in text
@@ -31,6 +34,8 @@ def test_dashboard_service_is_loopback_and_exact_table_select_only():
         assert write_grant not in text
     assert "dashboard_gateway" in text
     assert "- default" in text
+    assert "cap_drop:\n      - ALL" in text
+    assert "no-new-privileges:true" in text
 
 
 def test_cloudflared_depends_on_dashboard_and_has_only_gateway_network():
@@ -41,19 +46,24 @@ def test_cloudflared_depends_on_dashboard_and_has_only_gateway_network():
     assert "ports: []" in text
     assert "- dashboard_gateway" in text
     assert "- default" not in text
+    assert "cap_drop:\n      - ALL" in text
+    assert "no-new-privileges:true" in text
 
 
-def test_tunnel_launcher_requires_isolated_origin():
+def test_tunnel_launcher_requires_isolated_origin_and_preflight():
     text = _text("deploy/start-dashboard-tunnel.sh")
+    assert "sh deploy/preflight-forward.sh" in text
     assert "deploy/compose.dashboard.yml" in text
     assert "http://dashboard:8080" in text
     assert "Do NOT configure the public hostname to target api:8000" in text
+    assert "cloudflared container is not attached to the research API network" in text
     assert "dashboard-db-role dashboard cloudflared" in text
 
 
 def test_forward_launcher_starts_gateway_but_keeps_research_api_private():
     launcher = _text("deploy/start-forward.sh")
     hardened = _text("deploy/compose.forward.yml")
+    assert "sh deploy/preflight-forward.sh --research-only" in launcher
     assert "deploy/compose.dashboard.yml" in launcher
     assert "dashboard-db-role dashboard" in launcher
     assert "127.0.0.1:8080/dashboard" in launcher
