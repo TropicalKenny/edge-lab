@@ -18,11 +18,17 @@ set +a
 : "${FORWARD_INGEST_SECRET:?FORWARD_INGEST_SECRET is required}"
 : "${HELIUS_API_KEY:?HELIUS_API_KEY is required for Solana forward research}"
 : "${JUPITER_API_KEY:?JUPITER_API_KEY is required for quote-only Solana forward research}"
+: "${DASHBOARD_DB_PASSWORD:?DASHBOARD_DB_PASSWORD is required for hosted mode}"
 : "${CLOUDFLARE_TUNNEL_TOKEN:?CLOUDFLARE_TUNNEL_TOKEN is required for hosted mode}"
 
 if [ "$POSTGRES_PASSWORD" = "replace-with-a-long-random-password" ] || \
    [ "$FORWARD_INGEST_SECRET" = "replace-with-a-separate-long-random-secret" ]; then
   echo "Refusing to start with example secrets." >&2
+  exit 1
+fi
+
+if [ "$DASHBOARD_DB_PASSWORD" = "$POSTGRES_PASSWORD" ] || [ ${#DASHBOARD_DB_PASSWORD} -lt 24 ]; then
+  echo "Dashboard DB password must be separate from PostgreSQL admin and at least 24 characters." >&2
   exit 1
 fi
 
@@ -52,7 +58,7 @@ docker compose \
   -f deploy/compose.hosted.yml \
   --profile forward \
   --profile solana \
-  up -d --build dashboard cloudflared
+  up -d --build dashboard-db-role dashboard cloudflared
 
 docker compose \
   --env-file "$ENV_FILE" \
