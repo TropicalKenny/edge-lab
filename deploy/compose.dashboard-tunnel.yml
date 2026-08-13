@@ -1,12 +1,85 @@
 services:
+  postgres:
+    networks:
+      - default
+      - dashboard_data
+
+  dashboard-db-role:
+    image: postgres:16-alpine
+    profiles: ["dashboard"]
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      DASHBOARD_DB_PASSWORD: ${DASHBOARD_DB_PASSWORD:?set DASHBOARD_DB_PASSWORD}
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        psql -h postgres -U edge -d edge -v ON_ERROR_STOP=1 <<'SQL'
+        \getenv dashboard_password DASHBOARD_DB_PASSWORD
+        SELECT format('CREATE ROLE edge_dashboard LOGIN PASSWORD %L', :'dashboard_password')
+        WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'edge_dashboard') \gexec
+        SELECT format('ALTER ROLE edge_dashboard PASSWORD %L', :'dashboard_password') \gexec
+        GRANT CONNECT ON DATABASE edge TO edge_dashboard;
+        GRANT USAGE ON SCHEMA public TO edge_dashboard;
+        GRANT SELECT ON ALL TABLES IN SCHEMA public TO edge_dashboard;
+        ALTER DEFAULT PRIVILEGES FOR ROLE edge IN SCHEMA public GRANT SELECT ON TABLES TO edge_dashboard;
+        SQL
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - dashboard_data
+    restart: "no"
+
+  dashboard:
+    build: .
+    profiles: ["dashboard"]
+    command: ["uvicorn", "app.dashboard_server:app", "--host", "0.0.0.0", "--port", "8080"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://edge_dashboard:${DASHBOARD_DB_PASSWORD}@postgres:5432/edge
+      SIGNER_ENABLED: "false"
+    depends_on:
+      dashboard-db-role:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=5).read(32)"
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - dashboard_data
+      - dashboard_edge
+    ports: []
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+
   cloudflared:
-    image: cloudflare/cloudflared:latest
+    image: ${CLOUDFLARED_IMAGE:-cloudflare/cloudflared:2026.7.3}
     profiles: ["dashboard"]
     environment:
       TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?set CLOUDFLARE_TUNNEL_TOKEN}
-    command: ["tunnel", "--no-autoupdate", "--metrics", "0.0.0.0:2000", "run"]
+    command: ["tunnel", "--no-autoupdate", "run"]
     depends_on:
-      api:
-        condition: service_started
+      dashboard:
+        condition: service_healthy
+    networks:
+      - dashboard_edge
     ports: []
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     restart: unless-stopped
+
+networks:
+  dashboard_data:
+    internal: true
+  dashboard_edge:
+    driver: bridge
