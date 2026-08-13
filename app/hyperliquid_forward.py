@@ -27,7 +27,6 @@ from app.venues.hyperliquid import (
 from app.venues.hyperliquid_models import HyperliquidFundingSnapshot, HyperliquidPerpSnapshot
 
 ZERO = Decimal("0")
-ONE = Decimal("1")
 BPS = Decimal("10000")
 
 
@@ -50,6 +49,7 @@ class CarryStudyConfig:
     slippage_reserve_bps_per_leg: Decimal
     shadow_delay_ms: int
     max_exit_delay_hours: int
+    max_funding_oracle_age_minutes: int
 
     @classmethod
     def from_study(cls, study: ForwardStudy) -> "CarryStudyConfig":
@@ -67,9 +67,12 @@ class CarryStudyConfig:
                 planned_loss_pct=Decimal(str(raw.get("planned_loss_pct", "0.02"))),
                 spot_fee_bps=Decimal(str(raw.get("spot_fee_bps", "7.0"))),
                 perp_fee_bps=Decimal(str(raw.get("perp_fee_bps", "4.5"))),
-                slippage_reserve_bps_per_leg=Decimal(str(raw.get("slippage_reserve_bps_per_leg", "2"))),
+                slippage_reserve_bps_per_leg=Decimal(
+                    str(raw.get("slippage_reserve_bps_per_leg", "2"))
+                ),
                 shadow_delay_ms=int(raw.get("shadow_delay_ms", 1000)),
                 max_exit_delay_hours=int(raw.get("max_exit_delay_hours", 6)),
+                max_funding_oracle_age_minutes=int(raw.get("max_funding_oracle_age_minutes", 5)),
             )
         except (KeyError, ValueError, TypeError, ArithmeticError) as exc:
             raise CarryRunnerConfigError(f"invalid Hyperliquid carry study config: {exc}") from exc
@@ -80,20 +83,30 @@ class CarryStudyConfig:
         if self.paired_notional_usd <= ZERO:
             raise CarryRunnerConfigError("paired_notional_usd must be positive")
         if self.paired_notional_usd * Decimal("2") > Decimal(study.initial_capital_usd):
-            raise CarryRunnerConfigError("paired carry capital exceeds study initial capital without leverage")
+            raise CarryRunnerConfigError(
+                "paired carry capital exceeds study initial capital without leverage"
+            )
         if self.horizon_hours < 1 or self.horizon_hours > 72:
             raise CarryRunnerConfigError("horizon_hours must be between 1 and 72")
         if self.min_edge_bps < ZERO:
             raise CarryRunnerConfigError("min_edge_bps cannot be negative")
         if self.planned_loss_pct <= ZERO or self.planned_loss_pct > Decimal("0.25"):
             raise CarryRunnerConfigError("planned_loss_pct must be >0 and <=0.25")
-        for value in (self.spot_fee_bps, self.perp_fee_bps, self.slippage_reserve_bps_per_leg):
+        for value in (
+            self.spot_fee_bps,
+            self.perp_fee_bps,
+            self.slippage_reserve_bps_per_leg,
+        ):
             if value < ZERO:
                 raise CarryRunnerConfigError("fees/slippage reserve cannot be negative")
         if self.shadow_delay_ms < 0 or self.shadow_delay_ms > 5000:
             raise CarryRunnerConfigError("shadow_delay_ms must be between 0 and 5000")
         if self.max_exit_delay_hours < 1 or self.max_exit_delay_hours > 24:
             raise CarryRunnerConfigError("max_exit_delay_hours must be between 1 and 24")
+        if self.max_funding_oracle_age_minutes < 1 or self.max_funding_oracle_age_minutes > 60:
+            raise CarryRunnerConfigError(
+                "max_funding_oracle_age_minutes must be between 1 and 60"
+            )
 
 
 @dataclass(frozen=True)
@@ -141,14 +154,20 @@ def _fee(result: PaperExecutionResult) -> Decimal:
     return Decimal(result.total_fees) + Decimal(result.network_fee)
 
 
-def _adverse_slippage(side: str, *, mid: Decimal, fill: Decimal, quantity: Decimal) -> Decimal:
+def _adverse_slippage(
+    side: str, *, mid: Decimal, fill: Decimal, quantity: Decimal
+) -> Decimal:
     if side == "buy":
         return max(fill - mid, ZERO) * quantity
     return max(mid - fill, ZERO) * quantity
 
 
 def _full(result: PaperExecutionResult, quantity: Decimal) -> bool:
-    return result.status == "filled" and Decimal(result.filled_quantity) == quantity and result.average_price is not None
+    return (
+        result.status == "filled"
+        and Decimal(result.filled_quantity) == quantity
+        and result.average_price is not None
+    )
 
 
 class HyperliquidCarryForwardRunner:
@@ -166,7 +185,9 @@ class HyperliquidCarryForwardRunner:
         self.sleep = sleep
         self.research = HyperliquidResearchService(client=client, health=self.health)
 
-    async def run_active_studies(self, db: Session, *, now: datetime | None = None) -> list[TickResult]:
+    async def run_active_studies(
+        self, db: Session, *, now: datetime | None = None
+    ) -> list[TickResult]:
         now = _aware(now or datetime.now(timezone.utc))
         studies = db.scalars(
             select(ForwardStudy).where(
@@ -212,10 +233,14 @@ class HyperliquidCarryForwardRunner:
                     message=f"{type(exc).__name__}: {exc}",
                     data_integrity=False,
                 )
-                results.append(TickResult(study.id, "error", f"{type(exc).__name__}: {exc}"))
+                results.append(
+                    TickResult(study.id, "error", f"{type(exc).__name__}: {exc}")
+                )
         return results
 
-    async def run_study_once(self, db: Session, *, study: ForwardStudy, now: datetime) -> TickResult:
+    async def run_study_once(
+        self, db: Session, *, study: ForwardStudy, now: datetime
+    ) -> TickResult:
         if study.status != "active" or study.venue != "hyperliquid" or study.family != "funding":
             raise CarryRunnerError("study is not an active Hyperliquid funding study")
         config = CarryStudyConfig.from_study(study)
@@ -230,34 +255,55 @@ class HyperliquidCarryForwardRunner:
             raise CarryRunnerError(f"perp market not found for {coin}")
         aliases = {"BTC": "UBTC"}
         wanted_base = aliases.get(coin, coin)
-        spot = next((row for row in spots if row.base.upper() == wanted_base and row.quote.upper() == "USDC"), None)
+        spot = next(
+            (
+                row
+                for row in spots
+                if row.base.upper() == wanted_base and row.quote.upper() == "USDC"
+            ),
+            None,
+        )
         if spot is None:
             raise CarryRunnerError(f"USDC spot market not found for {coin}")
 
-        position = db.scalar(
+        positions = db.scalars(
             select(HyperliquidCarryPosition).where(
                 HyperliquidCarryPosition.study_id == study.id,
                 HyperliquidCarryPosition.status == "open",
             )
-        )
+        ).all()
+        if len(positions) > 1:
+            raise CarryRunnerError("multiple open carry positions found for one study")
+        position = positions[0] if positions else None
         if position is not None and now >= _aware(position.target_close_at):
-            close_result = await self._attempt_close(db, study, position, perp, spot, config, now)
+            close_result = await self._attempt_close(
+                db, study, position, perp, spot, config, now
+            )
             if close_result.action == "closed":
-                self._record_flat_nav_if_due(db, study, now)
+                self._record_flat_nav_if_due(
+                    db, study, _aware(position.closed_at or datetime.now(timezone.utc))
+                )
             else:
-                await self._record_open_nav_if_due(db, study, position, perp, spot, config, now)
+                await self._record_open_nav_if_due(
+                    db, study, position, perp, spot, config, now
+                )
             return close_result
 
         if position is None:
             entry_result = await self._attempt_entry(db, study, perp, spot, config, now)
-            position = db.scalar(
+            positions = db.scalars(
                 select(HyperliquidCarryPosition).where(
                     HyperliquidCarryPosition.study_id == study.id,
                     HyperliquidCarryPosition.status == "open",
                 )
-            )
+            ).all()
+            if len(positions) > 1:
+                raise CarryRunnerError("multiple open carry positions created for one study")
+            position = positions[0] if positions else None
             if position is not None:
-                await self._record_open_nav_if_due(db, study, position, perp, spot, config, now)
+                await self._record_open_nav_if_due(
+                    db, study, position, perp, spot, config, now
+                )
             else:
                 self._record_flat_nav_if_due(db, study, now)
             return entry_result
@@ -336,15 +382,23 @@ class HyperliquidCarryForwardRunner:
             capture=capture,
         )
         if not capture.fully_executable:
-            return TickResult(study.id, "entry_rejected", "paper/shadow depth insufficient for both hedge legs")
+            return TickResult(
+                study.id,
+                "entry_rejected",
+                "paper/shadow depth insufficient for both hedge legs",
+            )
 
         spot_price = Decimal(capture.spot.paper.average_price)
         perp_price = Decimal(capture.perp.paper.average_price)
         opened_at = max(capture.spot.paper_at, capture.perp.paper_at)
         allocated = config.paired_notional_usd * Decimal("2")
         planned_loss = allocated * config.planned_loss_pct
-        entry_spot_slippage = _adverse_slippage("buy", mid=spot.mid_px, fill=spot_price, quantity=quantity)
-        entry_perp_slippage = _adverse_slippage("sell", mid=perp.mid_px or perp.mark_px, fill=perp_price, quantity=quantity)
+        entry_spot_slippage = _adverse_slippage(
+            "buy", mid=spot.mid_px, fill=spot_price, quantity=quantity
+        )
+        entry_perp_slippage = _adverse_slippage(
+            "sell", mid=perp.mid_px or perp.mark_px, fill=perp_price, quantity=quantity
+        )
         position = HyperliquidCarryPosition(
             study_id=study.id,
             external_key=attempt_key,
@@ -371,6 +425,7 @@ class HyperliquidCarryForwardRunner:
                     "basis_bps": opportunity.basis_bps,
                     "signal_captured_at": opportunity.captured_at,
                     "shadow_delay_ms": config.shadow_delay_ms,
+                    "max_funding_oracle_age_minutes": config.max_funding_oracle_age_minutes,
                 }
             ),
         )
@@ -393,7 +448,10 @@ class HyperliquidCarryForwardRunner:
         if self._execution_attempt_exists(db, study.id, attempt_key):
             return TickResult(study.id, "exit_already_attempted", attempt_key)
 
-        elapsed_hours = max(1, math.ceil((now - _aware(position.opened_at)).total_seconds() / 3600) + 2)
+        elapsed_hours = max(
+            1,
+            math.ceil((now - _aware(position.opened_at)).total_seconds() / 3600) + 2,
+        )
         await self.research.funding_history(
             db,
             coin=position.coin,
@@ -422,7 +480,9 @@ class HyperliquidCarryForwardRunner:
             capture=capture,
         )
         if not capture.fully_executable:
-            if now > _aware(position.target_close_at) + timedelta(hours=config.max_exit_delay_hours):
+            if now > _aware(position.target_close_at) + timedelta(
+                hours=config.max_exit_delay_hours
+            ):
                 self._record_runner_incident(
                     db,
                     study,
@@ -432,7 +492,11 @@ class HyperliquidCarryForwardRunner:
                     message=f"position {position.id} could not be fully exited inside max delay",
                     data_integrity=False,
                 )
-            return TickResult(study.id, "exit_rejected", "paper/shadow depth insufficient for both exit legs")
+            return TickResult(
+                study.id,
+                "exit_rejected",
+                "paper/shadow depth insufficient for both exit legs",
+            )
 
         quantity = Decimal(position.quantity)
         close_at = max(capture.spot.paper_at, capture.perp.paper_at)
@@ -440,14 +504,23 @@ class HyperliquidCarryForwardRunner:
         exit_perp_price = Decimal(capture.perp.paper.average_price)
         exit_spot_mid = spot.mid_px
         exit_perp_mid = perp.mid_px or perp.mark_px
-        funding_pnl = self._funding_pnl(db, position, close_at)
+        funding_pnl = self._funding_pnl(
+            db,
+            position,
+            close_at,
+            max_oracle_age_minutes=config.max_funding_oracle_age_minutes,
+        )
         gross_pnl = (
             quantity * (exit_spot_mid - Decimal(position.entry_spot_mid))
             + quantity * (Decimal(position.entry_perp_mid) - exit_perp_mid)
             + funding_pnl
         )
-        exit_spot_slippage = _adverse_slippage("sell", mid=exit_spot_mid, fill=exit_spot_price, quantity=quantity)
-        exit_perp_slippage = _adverse_slippage("buy", mid=exit_perp_mid, fill=exit_perp_price, quantity=quantity)
+        exit_spot_slippage = _adverse_slippage(
+            "sell", mid=exit_spot_mid, fill=exit_spot_price, quantity=quantity
+        )
+        exit_perp_slippage = _adverse_slippage(
+            "buy", mid=exit_perp_mid, fill=exit_perp_price, quantity=quantity
+        )
         fees = (
             Decimal(position.entry_spot_fee_usd)
             + Decimal(position.entry_perp_fee_usd)
@@ -509,7 +582,9 @@ class HyperliquidCarryForwardRunner:
         position.net_pnl_usd = net_pnl
         position.close_reason = "horizon_elapsed"
         db.commit()
-        return TickResult(study.id, "closed", f"closed {position.coin} carry net_pnl={net_pnl}")
+        return TickResult(
+            study.id, "closed", f"closed {position.coin} carry net_pnl={net_pnl}"
+        )
 
     async def _capture_pair(
         self,
@@ -571,8 +646,18 @@ class HyperliquidCarryForwardRunner:
         shadow_spot = PaperBroker.simulate(shadow_spot_order, now=shadow_now)
         shadow_perp = PaperBroker.simulate(shadow_perp_order, now=shadow_now)
         return PairCapture(
-            spot=LegCapture(paper_spot, shadow_spot, _aware(spot_order.market_data_at), _aware(shadow_spot_order.market_data_at)),
-            perp=LegCapture(paper_perp, shadow_perp, _aware(perp_order.market_data_at), _aware(shadow_perp_order.market_data_at)),
+            spot=LegCapture(
+                paper_spot,
+                shadow_spot,
+                _aware(spot_order.market_data_at),
+                _aware(shadow_spot_order.market_data_at),
+            ),
+            perp=LegCapture(
+                paper_perp,
+                shadow_perp,
+                _aware(perp_order.market_data_at),
+                _aware(shadow_perp_order.market_data_at),
+            ),
         )
 
     def _record_pair_execution(
@@ -602,8 +687,16 @@ class HyperliquidCarryForwardRunner:
                 intended_quantity=quantity,
                 paper_filled_quantity=Decimal(result.paper.filled_quantity),
                 shadow_filled_quantity=Decimal(result.shadow.filled_quantity),
-                paper_average_price=Decimal(result.paper.average_price) if result.paper.average_price is not None else None,
-                shadow_average_price=Decimal(result.shadow.average_price) if result.shadow.average_price is not None else None,
+                paper_average_price=(
+                    Decimal(result.paper.average_price)
+                    if result.paper.average_price is not None
+                    else None
+                ),
+                shadow_average_price=(
+                    Decimal(result.shadow.average_price)
+                    if result.shadow.average_price is not None
+                    else None
+                ),
                 paper_cost_usd=_fee(result.paper),
                 shadow_cost_usd=_fee(result.shadow),
                 metadata={
@@ -625,9 +718,6 @@ class HyperliquidCarryForwardRunner:
         config: CarryStudyConfig,
         now: datetime,
     ) -> None:
-        bucket = _hour_bucket(now)
-        if bucket <= _aware(study.started_at) or self._nav_exists(db, study.id, bucket):
-            return
         quantity = Decimal(position.quantity)
         spot_payload, perp_payload = await asyncio.gather(
             self.client.l2_book(position.spot_book_coin),
@@ -649,6 +739,13 @@ class HyperliquidCarryForwardRunner:
             allow_partial=False,
             max_data_age_seconds=10,
         )
+        observed_at = max(
+            _aware(spot_order.market_data_at), _aware(perp_order.market_data_at)
+        )
+        if observed_at <= _aware(study.started_at) or self._nav_exists_for_hour(
+            db, study.id, observed_at
+        ):
+            return
         mark_now = datetime.now(timezone.utc)
         spot_exit = PaperBroker.simulate(spot_order, now=mark_now)
         perp_exit = PaperBroker.simulate(perp_order, now=mark_now)
@@ -663,7 +760,12 @@ class HyperliquidCarryForwardRunner:
                 data_integrity=False,
             )
             return
-        funding = self._funding_pnl(db, position, now)
+        funding = self._funding_pnl(
+            db,
+            position,
+            observed_at,
+            max_oracle_age_minutes=config.max_funding_oracle_age_minutes,
+        )
         current_perp_mid = perp.mid_px or perp.mark_px
         gross = (
             quantity * (spot.mid_px - Decimal(position.entry_spot_mid))
@@ -673,7 +775,10 @@ class HyperliquidCarryForwardRunner:
         exit_slippage = _adverse_slippage(
             "sell", mid=spot.mid_px, fill=Decimal(spot_exit.average_price), quantity=quantity
         ) + _adverse_slippage(
-            "buy", mid=current_perp_mid, fill=Decimal(perp_exit.average_price), quantity=quantity
+            "buy",
+            mid=current_perp_mid,
+            fill=Decimal(perp_exit.average_price),
+            quantity=quantity,
         )
         entry_costs = (
             Decimal(position.entry_spot_fee_usd)
@@ -698,14 +803,18 @@ class HyperliquidCarryForwardRunner:
         ForwardResearchService.record_nav(
             db,
             study_id=study.id,
-            observed_at=bucket,
+            observed_at=observed_at,
             nav_usd=nav,
             source="hyperliquid-carry-executable-mark",
         )
 
-    def _record_flat_nav_if_due(self, db: Session, study: ForwardStudy, now: datetime) -> None:
-        bucket = _hour_bucket(now)
-        if bucket <= _aware(study.started_at) or self._nav_exists(db, study.id, bucket):
+    def _record_flat_nav_if_due(
+        self, db: Session, study: ForwardStudy, observed_at: datetime
+    ) -> None:
+        observed_at = _aware(observed_at)
+        if observed_at <= _aware(study.started_at) or self._nav_exists_for_hour(
+            db, study.id, observed_at
+        ):
             return
         nav = Decimal(study.initial_capital_usd) + self._realised_pnl(db, study.id)
         if nav <= ZERO:
@@ -713,12 +822,19 @@ class HyperliquidCarryForwardRunner:
         ForwardResearchService.record_nav(
             db,
             study_id=study.id,
-            observed_at=bucket,
+            observed_at=observed_at,
             nav_usd=nav,
             source="hyperliquid-carry-realised-nav",
         )
 
-    def _funding_pnl(self, db: Session, position: HyperliquidCarryPosition, through: datetime) -> Decimal:
+    def _funding_pnl(
+        self,
+        db: Session,
+        position: HyperliquidCarryPosition,
+        through: datetime,
+        *,
+        max_oracle_age_minutes: int,
+    ) -> Decimal:
         through = _aware(through)
         funding_rows = db.scalars(
             select(HyperliquidFundingSnapshot)
@@ -731,26 +847,40 @@ class HyperliquidCarryForwardRunner:
         ).all()
         if not funding_rows:
             return ZERO
+        max_age = timedelta(minutes=max_oracle_age_minutes)
         price_rows = db.scalars(
             select(HyperliquidPerpSnapshot)
             .where(
                 HyperliquidPerpSnapshot.coin == position.coin,
-                HyperliquidPerpSnapshot.captured_at >= _aware(position.opened_at) - timedelta(minutes=5),
+                HyperliquidPerpSnapshot.captured_at
+                >= _aware(position.opened_at) - max_age,
                 HyperliquidPerpSnapshot.captured_at <= through,
             )
             .order_by(HyperliquidPerpSnapshot.captured_at.asc())
         ).all()
         quantity = Decimal(position.quantity)
-        fallback = Decimal(position.entry_perp_mid)
         total = ZERO
         index = 0
-        last_mark = fallback
+        last_snapshot: HyperliquidPerpSnapshot | None = None
         for funding in funding_rows:
             funding_time = _aware(funding.funding_time)
             while index < len(price_rows) and _aware(price_rows[index].captured_at) <= funding_time:
-                last_mark = Decimal(price_rows[index].mark_px)
+                last_snapshot = price_rows[index]
                 index += 1
-            total += quantity * last_mark * Decimal(funding.funding_rate)
+            if last_snapshot is None:
+                raise CarryRunnerError(
+                    f"missing oracle snapshot for funding at {funding_time.isoformat()}"
+                )
+            oracle_time = _aware(last_snapshot.captured_at)
+            if funding_time - oracle_time > max_age:
+                raise CarryRunnerError(
+                    f"oracle snapshot too old for funding at {funding_time.isoformat()}"
+                )
+            total += (
+                quantity
+                * Decimal(last_snapshot.oracle_px)
+                * Decimal(funding.funding_rate)
+            )
         return total
 
     @staticmethod
@@ -763,19 +893,27 @@ class HyperliquidCarryForwardRunner:
         rows = db.scalars(
             select(ForwardExecutionRecord.external_key).where(
                 ForwardExecutionRecord.study_id == study_id,
-                ForwardExecutionRecord.external_key.in_([f"{attempt_key}:spot", f"{attempt_key}:perp"]),
+                ForwardExecutionRecord.external_key.in_(
+                    [f"{attempt_key}:spot", f"{attempt_key}:perp"]
+                ),
             )
         ).all()
         if len(rows) == 1:
-            raise CarryRunnerError(f"partial persisted execution attempt detected for {attempt_key}")
+            raise CarryRunnerError(
+                f"partial persisted execution attempt detected for {attempt_key}"
+            )
         return len(rows) == 2
 
     @staticmethod
-    def _nav_exists(db: Session, study_id: str, observed_at: datetime) -> bool:
+    def _nav_exists_for_hour(
+        db: Session, study_id: str, observed_at: datetime
+    ) -> bool:
+        bucket = _hour_bucket(observed_at)
         return db.scalar(
             select(ForwardNavObservation.id).where(
                 ForwardNavObservation.study_id == study_id,
-                ForwardNavObservation.observed_at == observed_at,
+                ForwardNavObservation.observed_at >= bucket,
+                ForwardNavObservation.observed_at < bucket + timedelta(hours=1),
             )
         ) is not None
 
