@@ -9,4 +9,6 @@ services:
       dashboard:
         condition: service_healthy
     ports: []
+    networks:
+      - dashboard_gateway
     restart: unless-stopped
