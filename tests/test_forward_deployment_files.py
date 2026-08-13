@@ -20,9 +20,23 @@ def test_forward_compose_keeps_data_services_private_and_signer_disabled():
     assert "/exchange" not in text.lower()
 
 
-def test_forward_launcher_refuses_example_secrets_and_starts_frozen_operations():
+def test_burn_in_launcher_refuses_secrets_and_does_not_start_study_clock():
     text = (ROOT / "deploy" / "start-forward.sh").read_text()
     assert "Refusing to start with example secrets" in text
+    assert 'SIGNER_ENABLED:-false' in text
+    assert 'SIGNER_ENABLED != false' in text
+    assert "export SIGNER_ENABLED=false" in text
+    command = text.split("up -d --build", 1)[1].split("docker compose", 1)[0]
+    assert "hyperliquid-collector" in command
+    assert "db-backup" in command
+    assert "hyperliquid-forward-bootstrap" not in command
+    assert "hyperliquid-forward-runner" not in command
+    assert "forward-evaluator" not in command
+
+
+def test_official_study_launcher_starts_bootstrap_runner_and_evaluator():
+    text = (ROOT / "deploy" / "start-study.sh").read_text()
+    assert "Refusing to start study with example secrets" in text
     assert 'SIGNER_ENABLED:-false' in text
     assert 'SIGNER_ENABLED != false' in text
     assert "export SIGNER_ENABLED=false" in text
