@@ -28,11 +28,14 @@ Supported frozen runner values:
   "perp_fee_bps": "4.5",
   "slippage_reserve_bps_per_leg": "2",
   "shadow_delay_ms": 1000,
-  "max_exit_delay_hours": 6
+  "max_exit_delay_hours": 6,
+  "max_funding_oracle_age_minutes": 5
 }
 ```
 
 `paired_notional_usd * 2` may not exceed the study's initial capital. This preserves the V1 no-naked-leverage research boundary: one capital sleeve funds spot and another collateral sleeve backs the equal-size short-perp leg.
+
+`max_funding_oracle_age_minutes` is frozen with the study. A funding payment is not reconstructed when the latest persisted oracle observation at that funding timestamp is older than this limit.
 
 ## Entry process
 
@@ -63,13 +66,19 @@ The position stores:
 - planned-loss amount used only as research/risk metadata;
 - eventual exit prices/mids, funding, P&L and close reason.
 
-Only one open position per study is expected. Multiple-open-position state is treated as an operational error rather than silently aggregated.
+Only one open position per study is permitted by the runner. Multiple-open-position state is treated as an operational error rather than silently aggregated.
 
 ## Funding accounting
 
-At close, the runner refreshes settled public funding history. Funding P&L for the short-perp leg is reconstructed from settled funding rates and the most recent persisted perp mark at each funding timestamp, falling back to the entry perp mid only when no earlier mark snapshot is available.
+At close, the runner refreshes settled public funding history. Hyperliquid funding is reconstructed using the protocol's documented payment basis:
 
-Positive Hyperliquid funding is credited to the short position; negative funding is a cost.
+`position_size * oracle_price * funding_rate`
+
+For each settled funding timestamp, the runner uses the most recent persisted `oracle_px` at or before that timestamp. If no oracle snapshot exists, or if it is older than the study's frozen `max_funding_oracle_age_minutes`, the runner refuses to invent a funding value and records an operational failure instead.
+
+Positive funding is credited to the short-perp position; negative funding is a cost.
+
+This deliberately requires the public Hyperliquid collector to remain healthy during a forward study. A missing historical oracle observation is evidence quality loss, not permission to substitute mark price or entry price.
 
 ## Gross, costs and net P&L
 
@@ -99,6 +108,8 @@ When flat:
 `NAV = initial capital + realised closed-trade P&L`
 
 When a carry position is open, NAV is marked using a fully executable current paper liquidation of both legs plus accrued funding. If current depth cannot fully liquidate both sides, the runner does not invent a NAV value; it records an operational warning and lets the Milestone 6B NAV-gap gate expose persistent data/liquidity failures.
+
+A NAV row is timestamped at the **actual observation / executable-book timestamp**. The UTC hour is used only to deduplicate sampling frequency. The runner never backdates a current observation to the beginning of the hour.
 
 ## Idempotency
 
