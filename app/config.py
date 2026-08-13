@@ -42,6 +42,14 @@ class Settings(BaseSettings):
     solana_min_enrichment_interval_minutes: int = 15
     solana_shadow_exit_notional_usd: float = 25.0
     solana_quote_mint: str = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
+    portfolio_min_unallocated_pct: float = 0.40
+    portfolio_global_planned_risk_pct: float = 0.02
+    portfolio_bucket_planned_risk_pct: float = 0.01
+    portfolio_max_strategy_notional_pct: float = 0.20
+    portfolio_max_venue_notional_pct: float = 0.35
+    portfolio_venue_float_buffer_pct: float = 0.10
+    treasury_min_rebalance_usd: float = 25.0
+    treasury_max_transfer_cost_pct: float = 0.005
 
 @lru_cache
 def get_settings() -> Settings:
