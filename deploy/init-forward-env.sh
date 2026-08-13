@@ -52,10 +52,16 @@ Still required before full deployment:
   - JUPITER_API_KEY            (quote-only research API)
   - CLOUDFLARE_TUNNEL_TOKEN    (Dashboard V1 tunnel)
 
-Optional:
+Optional research/security enrichment:
   - GOPLUS_ACCESS_TOKEN
 
+Optional owner notifications:
+  - TELEGRAM_BOT_TOKEN
+  - TELEGRAM_CHAT_ID
+
+Telegram credentials are notification-only. They are not wallet, venue, signing, or withdrawal credentials.
+
 Do NOT add a wallet private key, seed phrase, mnemonic, or owner-vault credential.
-After filling the external credentials, run:
+After filling the mandatory external credentials, run:
   sh deploy/preflight-forward.sh
 EOF
