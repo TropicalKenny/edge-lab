@@ -18,7 +18,7 @@ Owner browser
   -> Cloudflare Tunnel
   -> cloudflared (dashboard_edge network only)
   -> dashboard:8080
-  -> edge_dashboard PostgreSQL role (exact-table SELECT only)
+  -> edge_dashboard PostgreSQL role (exact-table SELECT-only)
 
 Private research services
   -> api:8000 / host loopback 127.0.0.1:8000
@@ -33,7 +33,7 @@ Cloudflared is attached only to `dashboard_edge`. The research API is not on tha
 
 ## Database boundary
 
-The hosted dashboard uses a separate PostgreSQL login named `edge_dashboard`.
+The hosted dashboard uses a separate PostgreSQL login named `edge_dashboard` with an exact-table **SELECT-only** policy.
 
 Every dashboard bootstrap:
 
