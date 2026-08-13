@@ -25,19 +25,57 @@ Recommended exposure path:
 Owner browser
   -> Cloudflare Access authentication
   -> Cloudflare Tunnel
-  -> VPS loopback/private Edge Lab API
+  -> private Docker service: http://api:8000
   -> /dashboard
 ```
 
-PostgreSQL, Redis, research workers and future signer services must remain private. Do not expose database ports or worker containers to the public Internet.
+PostgreSQL, Redis, research workers and future signer services remain private. The hardened forward overlay publishes the API to the VPS host only at `127.0.0.1:8000`; PostgreSQL and Redis publish no host ports. The `cloudflared` container reaches the API over the private Compose network and itself publishes no host port.
 
-The hardened forward deployment already binds the API to loopback. A Cloudflare Tunnel can therefore target the local dashboard/API service without opening the database or worker network.
+This means the VPS does not need a public inbound dashboard port. The browser-facing hostname terminates at Cloudflare and the tunnel is outbound from the VPS.
+
+## Cloudflare setup order — important
+
+**Create the Cloudflare Access application before publishing the tunnel hostname.** The public hostname must not spend an interval exposed without the intended Access policy.
+
+A recommended production setup is:
+
+1. In Cloudflare Zero Trust, create a **Self-hosted** Access application for the intended dashboard hostname, for example `edge.example.com`.
+2. Add an **Allow** policy restricted to the owner's identity/email or approved identity-provider group. Do not use an Allow Everyone policy.
+3. Enable the identity-provider/MFA requirements you want for owner access.
+4. Create a remotely managed Cloudflare Tunnel for the Edge Lab VPS.
+5. In the tunnel's Published Application/Public Hostname configuration, publish the same hostname and set its service/origin URL to **`http://api:8000`**. This works because `cloudflared` and `api` share the private Docker Compose network.
+6. Enable Cloudflare's **Protect with Access** option for the published application so the tunnel validates the Access token before forwarding the request.
+7. Copy only the generated **Tunnel token** to `deploy/.env.forward` as `CLOUDFLARE_TUNNEL_TOKEN`. The token is a secret. Never commit the real `.env.forward` file.
+8. Start the research stack, then start the tunnel:
+
+```sh
+sh deploy/start-forward.sh
+sh deploy/start-dashboard-tunnel.sh
+```
+
+9. Open `https://edge.example.com/dashboard` and confirm Cloudflare Access authentication appears before Edge Lab.
+10. From outside the VPS, verify that PostgreSQL, Redis and port 8000 are not publicly reachable. The host-side Edge Lab API should remain loopback-only.
+
+The hostname is intentionally **not hard-coded in the repository**. Changing domains later should be a Cloudflare control-plane change, not an application rebuild.
+
+## Tunnel token handling
+
+`deploy/compose.dashboard-tunnel.yml` injects the remotely managed tunnel credential through the `TUNNEL_TOKEN` environment variable. The token is not appended to the process command and the tunnel container has no host port mapping.
+
+`deploy/start-dashboard-tunnel.sh` refuses to start when:
+
+- `deploy/.env.forward` is missing;
+- `CLOUDFLARE_TUNNEL_TOKEN` is empty;
+- the token contains an obvious example placeholder; or
+- `SIGNER_ENABLED` is anything other than `false`.
+
+The launcher always exports `SIGNER_ENABLED=false` before starting the tunnel service.
 
 ## Authentication boundary
 
-Dashboard V1 does not implement an application password. Production Internet access should be gated by Cloudflare Access before the request reaches Edge Lab. The first production deployment should use an allow policy restricted to the owner's identity.
+Dashboard V1 does not implement an application password. Production Internet access is gated by Cloudflare Access before the request reaches Edge Lab. The first deployment should use an owner-only Allow policy.
 
-Do not publish `/dashboard` directly on an unrestricted VPS port.
+Do not publish `/dashboard` directly on an unrestricted VPS port. Do not configure the tunnel hostname without the Access application/policy in place.
 
 ## UI information architecture
 
@@ -87,6 +125,8 @@ The dashboard aggregate API always reports:
 ```
 
 Dashboard V1 adds no POST/PATCH/PUT/DELETE routes under `/dashboard`.
+
+The Cloudflare hosting layer changes only how an authenticated owner reaches that read-only interface. It does not grant the dashboard, `cloudflared`, or Cloudflare access to a wallet/private key, the owner vault, a venue signer, or a fund-transfer function.
 
 ## Next UI milestone
 
