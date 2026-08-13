@@ -65,11 +65,15 @@ API: `http://localhost:8000`
 
 Dashboard: `http://localhost:8000/dashboard`
 
-Run tests:
+The repository verification gate is:
 
 ```sh
-python -m pytest
+sh scripts/verify-repo.sh
 ```
+
+It runs the complete pytest suite, Python compilation, a fresh Alembic migration and—when Docker Compose is available—the full research/dashboard/alert Compose render. API-contract tests reject duplicate FastAPI route/method registrations and duplicate OpenAPI operation IDs.
+
+GitHub Actions is intentionally not the repository gate at present; do not treat the absence of a GitHub check as validation.
 
 ## VPS paper/shadow deployment
 
