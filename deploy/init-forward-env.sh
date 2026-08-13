@@ -33,6 +33,7 @@ text = path.read_text()
 replacements = {
     "POSTGRES_PASSWORD=replace-with-a-long-random-password": f"POSTGRES_PASSWORD={token_urlsafe(36)}",
     "FORWARD_INGEST_SECRET=replace-with-a-separate-long-random-secret": f"FORWARD_INGEST_SECRET={token_urlsafe(48)}",
+    "DASHBOARD_DB_PASSWORD=": f"DASHBOARD_DB_PASSWORD={token_urlsafe(36)}",
 }
 for old, new in replacements.items():
     if old not in text:
@@ -44,12 +45,12 @@ PY
 chmod 600 "$TARGET"
 
 cat <<'EOF'
-Created deploy/.env.forward with generated internal secrets and mode 600.
+Created deploy/.env.forward with generated internal secrets, a separate dashboard read-only DB password, and mode 600.
 
 Still required before full deployment:
-  - HELIUS_API_KEY        (research data only)
-  - JUPITER_API_KEY       (quote-only research API)
-  - CLOUDFLARE_TUNNEL_TOKEN (Dashboard V1 tunnel)
+  - HELIUS_API_KEY             (research data only)
+  - JUPITER_API_KEY            (quote-only research API)
+  - CLOUDFLARE_TUNNEL_TOKEN    (Dashboard V1 tunnel)
 
 Optional:
   - GOPLUS_ACCESS_TOKEN
