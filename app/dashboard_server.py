@@ -34,6 +34,8 @@ async def dashboard_security_headers(request: Request, call_next):
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
     response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
     response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000"
+    response.headers["X-Robots-Tag"] = "noindex, nofollow, noarchive"
     response.headers["Cache-Control"] = "no-store"
     return response
 
@@ -58,4 +60,6 @@ def dashboard_health(db: Session = Depends(get_db)):
         "can_sign": False,
         "can_move_funds": False,
         "vault_accessible": False,
+        "signer_enabled": False,
+        "live_capital_usd": 0,
     }
