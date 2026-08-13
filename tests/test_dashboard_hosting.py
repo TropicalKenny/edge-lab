@@ -144,7 +144,7 @@ def test_dashboard_hosting_runbook_routes_public_hostname_to_dashboard_service()
     assert "http://dashboard:8080" in text
     assert "Do not point the tunnel at `api:8000`" in text
     assert "edge_dashboard" in text
-    assert "exact table" in text.lower()
+    assert "exact Dashboard V1 table allowlist" in text
     assert "future tables" in text.lower()
     assert "SELECT-only" in text
 
