@@ -46,6 +46,22 @@ def _json(value: str | None) -> Any:
         return value
 
 
+def _max_drawdown_pct(nav_rows: list[ForwardNavObservation]) -> Decimal | None:
+    if not nav_rows:
+        return None
+    peak = Decimal(nav_rows[0].nav_usd)
+    worst = ZERO
+    for row in nav_rows:
+        nav = Decimal(row.nav_usd)
+        if nav > peak:
+            peak = nav
+        if peak > ZERO:
+            drawdown = (peak - nav) / peak
+            if drawdown > worst:
+                worst = drawdown
+    return worst
+
+
 def _latest_evaluation(db: Session, study: ForwardStudy) -> StrategyEvaluationRun | None:
     return db.scalar(
         select(StrategyEvaluationRun)
@@ -105,6 +121,7 @@ def _study_payload(db: Session, study: ForwardStudy, now: datetime) -> dict[str,
     elapsed_days = max(0, int((now - started).total_seconds() // 86400)) if started else 0
     initial = Decimal(study.initial_capital_usd)
     current = Decimal(latest_nav.nav_usd) if latest_nav else initial
+    observed_drawdown = _max_drawdown_pct(nav_rows)
     return {
         "study_id": study.id,
         "external_id": study.external_id,
@@ -122,6 +139,7 @@ def _study_payload(db: Session, study: ForwardStudy, now: datetime) -> dict[str,
         "latest_nav_usd": current,
         "net_pnl_usd": Decimal(net_pnl),
         "return_pct": ((current - initial) / initial * Decimal("100")) if initial > ZERO else ZERO,
+        "observed_max_drawdown_pct": observed_drawdown,
         "closed_trades": int(trade_count),
         "execution_observations": int(execution_count),
         "unresolved_incidents": int(unresolved),
@@ -182,33 +200,56 @@ def dashboard_summary(db: Session = Depends(get_db)):
             .limit(20)
         ).all()
     )
+    permanent_integrity_count = int(
+        db.scalar(
+            select(func.count(ForwardStudyIncident.id)).where(
+                ForwardStudyIncident.data_integrity.is_(True)
+            )
+        )
+        or 0
+    )
     recent_trades = list(
         db.scalars(select(ForwardTradeRecord).order_by(ForwardTradeRecord.closed_at.desc()).limit(20)).all()
     )
     study_names = {row["study_id"]: row["strategy_name"] for row in study_rows}
+    drawdowns = [
+        Decimal(row["observed_max_drawdown_pct"])
+        for row in study_rows
+        if row["observed_max_drawdown_pct"] is not None
+    ]
     return {
         "mode": "read-only-dashboard",
         "generated_at": now,
+        "capital_scope": "independent-simulated-forward-study-bankrolls",
         "safety": {
             "can_trade_live": False,
             "can_sign": False,
             "can_move_funds": False,
             "vault_accessible": False,
             "signer_enabled": False,
+            "live_capital_usd": ZERO,
         },
         "portfolio": {
+            "label": "aggregate simulated research capital",
             "study_count": len(study_rows),
             "active_study_count": sum(1 for row in study_rows if row["study_status"] == "active"),
+            "simulated_initial_capital_usd": total_initial,
+            "simulated_latest_nav_usd": total_nav,
+            # Compatibility aliases for early Dashboard V1 clients.
             "initial_capital_usd": total_initial,
             "latest_nav_usd": total_nav,
             "net_pnl_usd": total_net_pnl,
             "return_pct": ((total_nav - total_initial) / total_initial * Decimal("100"))
             if total_initial > ZERO
             else ZERO,
+            "worst_observed_study_drawdown_pct": max(drawdowns) if drawdowns else None,
             "closed_trades": sum(int(row["closed_trades"]) for row in study_rows),
             "execution_observations": sum(int(row["execution_observations"]) for row in study_rows),
             "unresolved_incidents": len(unresolved),
-            "data_integrity_incidents": sum(1 for item in unresolved if item.data_integrity),
+            "permanent_data_integrity_incidents": permanent_integrity_count,
+            "contaminated_study_count": sum(1 for row in study_rows if row["contaminated"]),
+            # Compatibility alias; integrity failures are permanent even if operationally resolved.
+            "data_integrity_incidents": permanent_integrity_count,
         },
         "studies": study_rows,
         "incidents": [
