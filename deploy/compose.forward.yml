@@ -36,13 +36,27 @@ services:
       HYPERLIQUID_MARKET_POLL_SECONDS: "60"
     restart: unless-stopped
 
+  hyperliquid-forward-bootstrap:
+    environment:
+      DATABASE_URL: postgresql+psycopg://edge:${POSTGRES_PASSWORD}@postgres:5432/edge
+      SIGNER_ENABLED: "false"
+
   hyperliquid-forward-runner:
     environment:
       DATABASE_URL: postgresql+psycopg://edge:${POSTGRES_PASSWORD}@postgres:5432/edge
       REDIS_URL: redis://redis:6379/0
       SIGNER_ENABLED: "false"
       HYPERLIQUID_NETWORK: mainnet
-      HYPERLIQUID_FORWARD_POLL_SECONDS: "300"
+      HYPERLIQUID_FORWARD_POLL_SECONDS: ${HYPERLIQUID_FORWARD_POLL_SECONDS:-300}
+      HYPERLIQUID_FORWARD_STUDY_EXTERNAL_ID: ${HYPERLIQUID_FORWARD_STUDY_EXTERNAL_ID:-hyperliquid-btc-carry-m6c-v1}
+      FORWARD_STATUS_MAX_MARKET_AGE_SECONDS: ${FORWARD_STATUS_MAX_MARKET_AGE_SECONDS:-900}
+    restart: unless-stopped
+
+  forward-evaluator:
+    environment:
+      DATABASE_URL: postgresql+psycopg://edge:${POSTGRES_PASSWORD}@postgres:5432/edge
+      SIGNER_ENABLED: "false"
+      FORWARD_EVALUATION_POLL_SECONDS: ${FORWARD_EVALUATION_POLL_SECONDS:-3600}
     restart: unless-stopped
 
   polymarket-collector:
