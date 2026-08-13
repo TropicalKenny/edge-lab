@@ -6,40 +6,56 @@ Dashboard V1 gives the owner a browser UI for Edge Lab while the research worker
 
 The UI is deliberately **read-only**. It displays forward-study NAV, evidence state, research P&L, trade/execution counts, incidents and recent closed paper trades. It cannot sign, submit venue orders, move funds, reach the owner vault, change strategy status, or authorize live capital.
 
-All NAV/capital/P&L values in Dashboard V1 are **simulated research values**. Each frozen forward study has its own independent simulated bankroll. The overview may add those bankrolls together for observability, but that aggregate is not a real portfolio balance, is not money in the owner vault, and is not deployable capital. Live capital is explicitly reported as `$0` in this milestone.
+All NAV/capital/P&L values are **simulated research values**. Each frozen forward study has its own independent simulated bankroll. The overview may add those bankrolls together for observability, but that aggregate is not a real portfolio/vault balance and is not deployable capital. Live capital is explicitly `$0`.
 
-## Routes
+## Hosted surface
 
-- `/dashboard`
-- `/dashboard/assets/dashboard.css`
-- `/dashboard/assets/dashboard.js`
-- `/dashboard/api/summary`
-
-No third-party CDN or browser analytics dependency is required.
-
-## Hosting model
-
-The internal research API and the Internet-facing dashboard are separate ASGI surfaces:
+The internal research API and Internet-facing dashboard are separate ASGI surfaces:
 
 ```text
 Owner browser
-  -> Cloudflare Access authentication
+  -> Cloudflare Access
   -> Cloudflare Tunnel
-  -> private Docker service: http://dashboard:8080
-  -> edge_dashboard PostgreSQL role (SELECT-only)
+  -> cloudflared (dashboard_edge network only)
+  -> dashboard:8080
+  -> edge_dashboard PostgreSQL role (exact-table SELECT-only)
 
-VPS-only
-  -> internal API: 127.0.0.1:8000
-  -> PostgreSQL / Redis / research workers: no public ports
+Private research services
+  -> api:8000 / host loopback 127.0.0.1:8000
+  -> PostgreSQL / Redis / collectors / runners / evaluator
 ```
 
-`app.dashboard_server` mounts only Dashboard V1 plus `/healthz`. It does not mount signer, risk, venue refresh/scan, research-ingestion, portfolio mutation, treasury, or internal operations routes.
+`app.dashboard_server` mounts Dashboard V1 plus `/healthz`. It does not mount signer, risk, paper simulation, venue, forward-operations, portfolio mutation or internal documentation/OpenAPI routes.
 
-The dashboard gets a dedicated PostgreSQL login named `edge_dashboard`, with CONNECT, schema USAGE and SELECT only, including default SELECT privileges for future tables. It never receives the main `edge` database password.
+Cloudflared is attached only to `dashboard_edge`. The research API is not on that network, so a bad remotely-managed Cloudflare origin cannot directly resolve/reach `api:8000` from the cloudflared container.
 
-The `cloudflared` container shares only the isolated `dashboard_edge` network with the dashboard. **Do not point the tunnel at `api:8000`.**
+**The correct Cloudflare origin is `http://dashboard:8080`. Do not point the tunnel at `api:8000`.**
 
-## Cloudflare setup order — important
+## Database boundary
+
+The hosted dashboard uses a separate PostgreSQL login named `edge_dashboard` with an exact-table **SELECT-only** policy.
+
+Every dashboard bootstrap:
+
+- makes the role non-superuser/non-creator/non-replication/non-bypass-RLS;
+- defaults transactions to read-only;
+- applies short statement/idle-transaction timeouts;
+- removes any older broad/default table privileges;
+- grants SELECT only to the exact Dashboard V1 table allowlist:
+  - `strategies`
+  - `strategy_versions`
+  - `strategy_evaluation_runs`
+  - `forward_studies`
+  - `forward_nav_observations`
+  - `forward_study_incidents`
+  - `forward_trade_records`
+  - `forward_execution_records`
+
+It does **not** receive `SELECT ON ALL TABLES`, and future tables do not automatically become visible. This prevents a later wallet, treasury or other sensitive table from becoming readable merely because a migration creates it.
+
+Runtime verification introspects PostgreSQL privileges and fails unless the readable table set is exactly the allowlist and INSERT/UPDATE/DELETE/TRUNCATE/REFERENCES/TRIGGER privileges are all unavailable.
+
+## Cloudflare setup order
 
 **Create the Cloudflare Access application before publishing the tunnel hostname.**
 
@@ -49,9 +65,9 @@ The `cloudflared` container shares only the isolated `dashboard_edge` network wi
 4. Create a remotely managed Cloudflare Tunnel.
 5. Publish the hostname with origin URL **`http://dashboard:8080`**.
 6. Do not point the tunnel at `api:8000`.
-7. Enable **Protect with Access** when available.
+7. Enable **Protect with Access**.
 8. Put only the generated Tunnel token into uncommitted `deploy/.env.forward` as `CLOUDFLARE_TUNNEL_TOKEN`.
-9. `deploy/init-forward-env.sh` generates a separate random `DASHBOARD_DB_PASSWORD`; do not replace it with `POSTGRES_PASSWORD`.
+9. Keep `DASHBOARD_DB_PASSWORD` separate from PostgreSQL and forward-ingest secrets.
 10. Run:
 
 ```sh
@@ -68,18 +84,34 @@ The hostname is intentionally not hard-coded in the repository.
 
 ## Deployment safeguards
 
-The tunnel token is injected through `TUNNEL_TOKEN`, never appended to `cloudflared`'s command line.
+Normal launchers invoke preflight themselves:
 
-Preflight rejects wallet/private-key material, unsafe signer state, placeholder secrets, reused/weak dashboard database credentials, public database/dashboard ports, a non-loopback internal API, a dashboard not using `edge_dashboard`, and a Cloudflare tunnel with internal credentials or networks beyond `dashboard_edge`.
+- `start-forward.sh` runs the research-only preflight;
+- `start-dashboard-tunnel.sh` runs the full dashboard/tunnel preflight.
 
-Runtime verification tests the exact Cloudflare-facing `dashboard` container and confirms `/signer/status` is not mounted there.
+Preflight rejects wallet/private-key material, unsafe signer state, placeholder/reused secrets, public database/dashboard ports, a non-loopback research API, broad dashboard database grants, unexpected dashboard/cloudflared credentials, or any Cloudflare network shared with the research API.
+
+Runtime verification checks:
+
+- exact dashboard health/safety state, including `live_capital_usd=0`;
+- explicit `capital_scope=independent-simulated-forward-study-bankrolls`;
+- internal dashboard routes are absent;
+- exact PostgreSQL read allowlist and absence of table-write privileges;
+- cloudflared and the research API share no Docker network;
+- strict venue readiness when requested.
+
+## Browser hardening
+
+The isolated dashboard adds a same-origin CSP, frame blocking, MIME no-sniff, no-referrer policy, restrictive Permissions Policy, same-origin opener/resource policies, HSTS, no-index/no-archive and `Cache-Control: no-store`.
+
+Its health endpoint fails closed when signing is enabled or its database connection is unavailable.
 
 ## UI information architecture
 
 ### Overview
 
 - aggregate **simulated** forward-study NAV;
-- return versus each independent frozen study's starting bankroll;
+- return across independent frozen study bankrolls;
 - closed research P&L;
 - worst observed drawdown among independent study NAV series;
 - active study count;
@@ -111,7 +143,7 @@ The dashboard is light-first, supports an optional local dark theme, collapses n
 
 ## Safety contract
 
-The dashboard reports a safety object equivalent to:
+The dashboard reports:
 
 ```json
 {
@@ -124,10 +156,10 @@ The dashboard reports a safety object equivalent to:
 }
 ```
 
-It identifies capital scope as `independent-simulated-forward-study-bankrolls` and adds no write routes under `/dashboard`.
+It identifies capital scope as `independent-simulated-forward-study-bankrolls` and adds no dashboard write routes.
 
-The hosting layer grants neither Cloudflare nor the dashboard access to a wallet/private key, owner vault, venue signer, or fund-transfer function.
+The hosting layer grants neither Cloudflare nor the dashboard access to a wallet/private key, owner vault, venue signer or fund-transfer function.
 
 ## Next UI milestone
 
-After V1 runs against real forward data, safe owner operations can be added separately. Candidates are pause/freeze research and incident acknowledgement. Treasury approval, live-order control and signer actions remain separate security projects.
+After V1 runs against real forward data, safe owner operations can be reviewed separately. Candidates are pause/freeze research and incident acknowledgement. Treasury approval, live-order control and signer actions remain separate security projects.
