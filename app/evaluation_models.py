@@ -1,7 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import DateTime, Integer, Numeric, String, Text
+from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models import Base, uid, utcnow
@@ -12,6 +12,7 @@ class StrategyEvaluationRun(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
     external_run_id: Mapped[str] = mapped_column(String(100), unique=True, index=True)
+    strategy_version_id: Mapped[str] = mapped_column(ForeignKey("strategy_versions.id"), index=True)
     strategy_slug: Mapped[str] = mapped_column(String(100), index=True)
     strategy_version: Mapped[str] = mapped_column(String(64), index=True)
     family: Mapped[str] = mapped_column(String(32), index=True)
