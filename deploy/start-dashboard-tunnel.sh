@@ -14,6 +14,8 @@ set -a
 . "$ENV_FILE"
 set +a
 
+: "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}"
+: "${DASHBOARD_DB_PASSWORD:?DASHBOARD_DB_PASSWORD is required}"
 : "${CLOUDFLARE_TUNNEL_TOKEN:?CLOUDFLARE_TUNNEL_TOKEN is required}"
 
 case "$CLOUDFLARE_TUNNEL_TOKEN" in
@@ -23,6 +25,11 @@ case "$CLOUDFLARE_TUNNEL_TOKEN" in
     ;;
 esac
 
+if [ "$DASHBOARD_DB_PASSWORD" = "replace-with-a-third-long-random-password" ]; then
+  echo "Refusing to start with the example dashboard database password." >&2
+  exit 1
+fi
+
 if [ "${SIGNER_ENABLED:-false}" != "false" ]; then
   echo "Refusing dashboard deployment with SIGNER_ENABLED != false." >&2
   exit 1
@@ -30,26 +37,17 @@ fi
 
 export SIGNER_ENABLED=false
 
-docker compose \
-  --env-file "$ENV_FILE" \
-  -f docker-compose.yml \
-  -f deploy/compose.forward.yml \
-  -f deploy/compose.solana-forward.yml \
-  -f deploy/compose.dashboard-tunnel.yml \
-  --profile dashboard \
-  up -d cloudflared
+COMPOSE_FILES="-f docker-compose.yml -f deploy/compose.forward.yml -f deploy/compose.solana-forward.yml -f deploy/compose.dashboard.yml -f deploy/compose.dashboard-tunnel.yml"
 
-docker compose \
-  --env-file "$ENV_FILE" \
-  -f docker-compose.yml \
-  -f deploy/compose.forward.yml \
-  -f deploy/compose.solana-forward.yml \
-  -f deploy/compose.dashboard-tunnel.yml \
-  --profile dashboard \
-  ps cloudflared
+# shellcheck disable=SC2086
+docker compose --env-file "$ENV_FILE" $COMPOSE_FILES --profile dashboard up -d --build dashboard-db-role dashboard cloudflared
+
+# shellcheck disable=SC2086
+docker compose --env-file "$ENV_FILE" $COMPOSE_FILES --profile dashboard ps dashboard cloudflared
 
 cat <<'EOF'
 Dashboard tunnel started.
-Cloudflare's remotely managed Public Hostname must target: http://api:8000
+Cloudflare's remotely managed Public Hostname must target: http://dashboard:8080
+Do NOT configure the public hostname to target api:8000.
 Keep the hostname behind an owner-only Cloudflare Access application.
 EOF
