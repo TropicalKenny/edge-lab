@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#f4f6f3">
+  <title>Edge Lab</title>
+  <link rel="stylesheet" href="/assets/dashboard.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">E</div>
+        <div><strong>Edge Lab</strong><span>Research terminal</span></div>
+      </div>
+      <nav class="nav" aria-label="Dashboard sections">
+        <a class="nav-item active" href="#overview"><span class="nav-icon">⌁</span>Overview</a>
+        <a class="nav-item" href="#strategies"><span class="nav-icon">◫</span>Strategies</a>
+        <a class="nav-item" href="#trades"><span class="nav-icon">↗</span>Trades</a>
+        <a class="nav-item" href="#incidents"><span class="nav-icon">◇</span>Incidents</a>
+      </nav>
+      <div class="sidebar-foot">
+        <div class="safety-mini"><span class="dot dot-green"></span><div><strong>Paper / Shadow</strong><span>No live capital</span></div></div>
+        <div class="sidebar-note">Vault and signing remain outside this dashboard.</div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <div class="eyebrow">OWNER DASHBOARD</div>
+          <h1>Research overview</h1>
+        </div>
+        <div class="top-actions">
+          <div class="mode-pill"><span class="dot dot-amber"></span>Research mode</div>
+          <button id="refreshButton" class="icon-button" type="button" aria-label="Refresh data">↻</button>
+        </div>
+      </header>
+
+      <section id="overview" class="section">
+        <div id="attentionBanner" class="attention-banner hidden" role="status"></div>
+        <div class="metric-grid">
+          <article class="metric-card hero-metric">
+            <div class="metric-label">Combined research NAV <span class="info" title="Sum of independent simulated study portfolios. This is not a real wallet balance.">i</span></div>
+            <div class="metric-value" id="combinedNav">—</div>
+            <div class="metric-foot"><span id="combinedPnl" class="delta neutral">—</span><span>across active studies</span></div>
+          </article>
+          <article class="metric-card">
+            <div class="metric-label">Active studies</div>
+            <div class="metric-value" id="activeStudies">—</div>
+            <div class="metric-foot"><span id="venueCount">—</span><span>venues online</span></div>
+          </article>
+          <article class="metric-card">
+            <div class="metric-label">Open simulated positions</div>
+            <div class="metric-value" id="openPositions">—</div>
+            <div class="metric-foot"><span id="tradeCount">—</span><span>closed trades recorded</span></div>
+          </article>
+          <article class="metric-card">
+            <div class="metric-label">System state</div>
+            <div class="state-value"><span id="systemDot" class="state-orb"></span><span id="systemState">—</span></div>
+            <div class="metric-foot"><span id="incidentCount">—</span><span>unresolved incidents</span></div>
+          </article>
+        </div>
+
+        <div class="overview-grid">
+          <article class="panel chart-panel">
+            <div class="panel-head">
+              <div><div class="panel-kicker">PERFORMANCE</div><h2>NAV history</h2></div>
+              <select id="studySelect" class="study-select" aria-label="Choose study"></select>
+            </div>
+            <div class="chart-summary">
+              <div><span class="chart-label">Selected NAV</span><strong id="selectedNav">—</strong></div>
+              <div><span class="chart-label">Study return</span><strong id="selectedReturn">—</strong></div>
+              <div><span class="chart-label">Forward age</span><strong id="selectedDays">—</strong></div>
+            </div>
+            <div class="chart-wrap">
+              <canvas id="navChart" aria-label="NAV history chart"></canvas>
+              <div id="chartEmpty" class="chart-empty hidden">Waiting for NAV observations.</div>
+            </div>
+            <div class="chart-axis"><span id="chartStart">—</span><span id="chartEnd">—</span></div>
+          </article>
+
+          <article class="panel guardrail-panel">
+            <div class="panel-head"><div><div class="panel-kicker">SAFETY</div><h2>Hard boundaries</h2></div><span class="lock-badge">Read only</span></div>
+            <div class="guardrail-list">
+              <div class="guardrail"><span class="guard-icon ok">✓</span><div><strong>Signer disabled</strong><span>Dashboard cannot sign transactions.</span></div></div>
+              <div class="guardrail"><span class="guard-icon ok">✓</span><div><strong>No fund movement</strong><span>Vault remains owner-controlled.</span></div></div>
+              <div class="guardrail"><span class="guard-icon ok">✓</span><div><strong>Evidence first</strong><span>Strategies remain gated by RED / AMBER / GREEN evidence.</span></div></div>
+              <div class="guardrail"><span class="guard-icon ok">✓</span><div><strong>Private services</strong><span>Workers, PostgreSQL and Redis are not internet-facing.</span></div></div>
+            </div>
+            <div class="guardrail-footer"><span class="dot dot-green"></span><span>Designed for authenticated private tunnel access</span></div>
+          </article>
+        </div>
+      </section>
+
+      <section id="strategies" class="section">
+        <div class="section-head"><div><div class="eyebrow">FORWARD RESEARCH</div><h2>Strategy evidence</h2></div><span class="section-caption">Evidence, not promises</span></div>
+        <div id="strategyGrid" class="strategy-grid"><div class="skeleton strategy-skeleton"></div><div class="skeleton strategy-skeleton"></div><div class="skeleton strategy-skeleton"></div></div>
+      </section>
+
+      <section id="trades" class="section">
+        <div class="section-head"><div><div class="eyebrow">JOURNAL</div><h2>Recent closed trades</h2></div><span class="section-caption" id="tradeCaption">Paper / shadow evidence</span></div>
+        <div class="panel table-panel">
+          <div class="table-scroll">
+            <table>
+              <thead><tr><th>Venue</th><th>Instrument</th><th>Closed</th><th>Capital</th><th>Costs</th><th>Net P&amp;L</th></tr></thead>
+              <tbody id="tradesBody"><tr><td colspan="6" class="empty-cell">Loading trade journal…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section id="incidents" class="section">
+        <div class="section-head"><div><div class="eyebrow">OPERATIONS</div><h2>Incidents</h2></div><span class="section-caption">Unresolved only</span></div>
+        <div id="incidentList" class="incident-list"><div class="panel empty-panel">Loading operational state…</div></div>
+      </section>
+
+      <footer class="footer"><span>Edge Lab · Quant research system</span><span id="lastUpdated">Not yet refreshed</span></footer>
+    </main>
+  </div>
+
+  <div id="toast" class="toast" role="status"></div>
+  <script src="/assets/dashboard.js" defer></script>
+</body>
+</html>
