@@ -14,7 +14,7 @@ def test_deployment_shell_scripts_parse_with_posix_sh():
         assert result.returncode == 0, result.stderr
 
 
-def test_preflight_fails_closed_on_secrets_signer_and_wallet_material():
+def test_preflight_fails_closed_on_secrets_signer_wallet_and_dashboard_db():
     text = PREFLIGHT.read_text()
     assert "chmod 600" in text
     assert "PRIVATE_KEY|SEED_PHRASE|MNEMONIC" in text
@@ -22,38 +22,33 @@ def test_preflight_fails_closed_on_secrets_signer_and_wallet_material():
     assert "export SIGNER_ENABLED=false" in text
     assert "POSTGRES_PASSWORD must be at least 24 characters" in text
     assert "FORWARD_INGEST_SECRET must be at least 32 characters" in text
-    assert "HELIUS_API_KEY is required for Solana research" in text
-    assert "JUPITER_API_KEY is required for quote-only Solana research" in text
+    assert "DASHBOARD_DB_PASSWORD is required for dashboard preflight" in text
+    assert "DASHBOARD_DB_PASSWORD must differ from POSTGRES_PASSWORD" in text
     assert "CLOUDFLARE_TUNNEL_TOKEN is required for dashboard preflight" in text
     assert "--research-only" in text
 
 
-def test_preflight_validates_rendered_network_without_persisting_rendered_secrets():
+def test_preflight_validates_rendered_dashboard_network_and_credentials():
     text = PREFLIGHT.read_text()
     assert "config -q" in text
     assert "config --format json |" in text
-    assert "PostgreSQL has a published host port" in text
-    assert "Redis has a published host port" in text
-    assert "API host binding is not 127.0.0.1" in text
-    assert "cloudflared has a published host port" in text
+    assert "dashboard-db-role" in text
+    assert "dashboard does not use edge_dashboard database role" in text
+    assert "cloudflared must be isolated to dashboard_edge" in text
     assert "cloudflared unexpectedly receives" in text
+    assert "dashboard unexpectedly receives" in text
+    assert "API host binding is not 127.0.0.1" in text
     assert "SIGNER_ENABLED=false" in text
     assert "> /tmp" not in text
     assert ">/tmp" not in text
     assert "mktemp" not in text
 
 
-def test_runtime_verify_checks_read_only_dashboard_and_all_three_studies():
+def test_runtime_verify_checks_cloudflare_facing_dashboard_and_three_studies():
     text = VERIFY.read_text()
-    assert "http://127.0.0.1:8000/dashboard/api/summary" in text
-    for flag in (
-        '"can_trade_live": False',
-        '"can_sign": False',
-        '"can_move_funds": False',
-        '"vault_accessible": False',
-        '"signer_enabled": False',
-    ):
-        assert flag in text
+    assert "isolated dashboard service boundary failed" in text
+    assert 'base="http://127.0.0.1:8080"' in text
+    assert '/signer/status' in text
     assert "python -m app.forward_ops status" in text
     assert "python -m app.polymarket_forward_ops status" in text
     assert "python -m app.solana_forward_ops status" in text
