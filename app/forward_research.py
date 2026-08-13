@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import uuid
 from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
 
@@ -32,6 +32,7 @@ from app.models import Experiment, Strategy, StrategyVersion
 
 ZERO = Decimal("0")
 PNL_TOLERANCE = Decimal("0.000001")
+FUTURE_TOLERANCE = timedelta(minutes=1)
 DECIMAL_POLICY_FIELDS = {
     "max_drawdown_pct",
     "min_profit_factor",
@@ -40,6 +41,7 @@ DECIMAL_POLICY_FIELDS = {
     "min_shadow_fill_ratio",
     "max_shadow_p90_price_divergence_bps",
     "max_prediction_calibration_error",
+    "max_nav_gap_days",
 }
 
 
@@ -58,6 +60,11 @@ def _json(value: Any) -> str:
 def _policy_json(policy: EvaluationPolicy) -> str:
     policy.validate()
     return _json(asdict(policy))
+
+
+def _reject_future(value: datetime, label: str) -> None:
+    if _aware(value) > datetime.now(timezone.utc) + FUTURE_TOLERANCE:
+        raise ForwardResearchError(f"{label} cannot be in the future")
 
 
 def policy_from_json(payload: str) -> EvaluationPolicy:
@@ -115,6 +122,12 @@ def _same_decimal(left: Decimal, right: Decimal) -> bool:
     return Decimal(left) == Decimal(right)
 
 
+def _same_optional_decimal(left: Decimal | None, right: Decimal | None) -> bool:
+    if left is None or right is None:
+        return left is None and right is None
+    return Decimal(left) == Decimal(right)
+
+
 class ForwardResearchService:
     @staticmethod
     def create_study(
@@ -136,13 +149,28 @@ class ForwardResearchService:
             raise ForwardResearchError("study identity/family/venue/instrument are required")
         if initial_capital_usd <= ZERO:
             raise ForwardResearchError("initial study capital must be positive")
-        existing = db.scalar(select(ForwardStudy).where(ForwardStudy.external_id == external_id))
-        if existing is not None:
-            if existing.strategy_version_id != _registered_version(db, strategy_slug, strategy_version)[1].id:
-                raise ForwardResearchError("external study id already belongs to a different strategy version")
-            return existing
+        started_at = _aware(started_at)
+        _reject_future(started_at, "study start")
         _, version = _registered_version(db, strategy_slug, strategy_version)
         _registered_experiment(db, experiment_id, version.id)
+        policy_json = _policy_json(evaluation_policy)
+        config_json = _json(study_config)
+        existing = db.scalar(select(ForwardStudy).where(ForwardStudy.external_id == external_id))
+        if existing is not None:
+            same = (
+                existing.strategy_version_id == version.id
+                and existing.experiment_id == experiment_id
+                and existing.family == family
+                and existing.venue == venue
+                and existing.instrument == instrument
+                and _same_decimal(existing.initial_capital_usd, initial_capital_usd)
+                and existing.evaluation_policy_json == policy_json
+                and existing.study_config_json == config_json
+                and _aware(existing.started_at) == started_at
+            )
+            if not same:
+                raise ForwardResearchError("conflicting retry for existing forward study id")
+            return existing
         study = ForwardStudy(
             external_id=external_id,
             strategy_version_id=version.id,
@@ -151,9 +179,9 @@ class ForwardResearchService:
             venue=venue,
             instrument=instrument,
             initial_capital_usd=initial_capital_usd,
-            evaluation_policy_json=_policy_json(evaluation_policy),
-            study_config_json=_json(study_config),
-            started_at=_aware(started_at),
+            evaluation_policy_json=policy_json,
+            study_config_json=config_json,
+            started_at=started_at,
             status="active",
         )
         db.add(study)
@@ -180,10 +208,11 @@ class ForwardResearchService:
         study = ForwardResearchService.get_study(db, study_id)
         _active(study)
         observed_at = _aware(observed_at)
+        _reject_future(observed_at, "NAV observation")
         if observed_at < _aware(study.started_at):
             raise ForwardResearchError("NAV observation predates study start")
-        if nav_usd <= ZERO:
-            raise ForwardResearchError("NAV must be positive")
+        if nav_usd <= ZERO or not source.strip():
+            raise ForwardResearchError("NAV value/source is invalid")
         existing = db.scalar(
             select(ForwardNavObservation).where(
                 ForwardNavObservation.study_id == study_id,
@@ -191,7 +220,7 @@ class ForwardResearchService:
             )
         )
         if existing is not None:
-            if not _same_decimal(existing.nav_usd, nav_usd):
+            if not _same_decimal(existing.nav_usd, nav_usd) or existing.source != source:
                 raise ForwardResearchError("conflicting NAV observation for the same timestamp")
             return existing
         row = ForwardNavObservation(study_id=study_id, observed_at=observed_at, nav_usd=nav_usd, source=source)
@@ -221,6 +250,8 @@ class ForwardResearchService:
         if not external_key.strip():
             raise ForwardResearchError("trade external key is required")
         opened_at, closed_at = _aware(opened_at), _aware(closed_at)
+        _reject_future(opened_at, "trade open")
+        _reject_future(closed_at, "trade close")
         if opened_at < _aware(study.started_at) or closed_at < opened_at:
             raise ForwardResearchError("trade timestamps are outside valid forward chronology")
         if fees_usd < ZERO or slippage_usd < ZERO:
@@ -229,6 +260,7 @@ class ForwardResearchService:
             raise ForwardResearchError("trade capital/planned loss is invalid")
         if abs(net_pnl_usd - (gross_pnl_usd - fees_usd - slippage_usd)) > PNL_TOLERANCE:
             raise ForwardResearchError("trade net PnL does not reconcile")
+        metadata_json = _json(metadata or {})
         existing = db.scalar(
             select(ForwardTradeRecord).where(
                 ForwardTradeRecord.study_id == study_id,
@@ -236,7 +268,18 @@ class ForwardResearchService:
             )
         )
         if existing is not None:
-            if not _same_decimal(existing.net_pnl_usd, net_pnl_usd) or _aware(existing.closed_at) != closed_at:
+            same = (
+                _aware(existing.opened_at) == opened_at
+                and _aware(existing.closed_at) == closed_at
+                and _same_decimal(existing.gross_pnl_usd, gross_pnl_usd)
+                and _same_decimal(existing.net_pnl_usd, net_pnl_usd)
+                and _same_decimal(existing.fees_usd, fees_usd)
+                and _same_decimal(existing.slippage_usd, slippage_usd)
+                and _same_decimal(existing.allocated_capital_usd, allocated_capital_usd)
+                and _same_decimal(existing.planned_loss_usd, planned_loss_usd)
+                and existing.metadata_json == metadata_json
+            )
+            if not same:
                 raise ForwardResearchError("conflicting retry for existing trade key")
             return existing
         row = ForwardTradeRecord(
@@ -250,7 +293,7 @@ class ForwardResearchService:
             slippage_usd=slippage_usd,
             allocated_capital_usd=allocated_capital_usd,
             planned_loss_usd=planned_loss_usd,
-            metadata_json=_json(metadata or {}),
+            metadata_json=metadata_json,
         )
         db.add(row)
         db.commit()
@@ -278,6 +321,7 @@ class ForwardResearchService:
         study = ForwardResearchService.get_study(db, study_id)
         _active(study)
         observed_at = _aware(observed_at)
+        _reject_future(observed_at, "execution observation")
         if observed_at < _aware(study.started_at):
             raise ForwardResearchError("execution observation predates study start")
         if side not in {"buy", "sell"} or not external_key.strip():
@@ -296,6 +340,7 @@ class ForwardResearchService:
             trade = db.get(ForwardTradeRecord, trade_id)
             if trade is None or trade.study_id != study_id:
                 raise ForwardResearchError("execution trade link is invalid")
+        metadata_json = _json(metadata or {})
         existing = db.scalar(
             select(ForwardExecutionRecord).where(
                 ForwardExecutionRecord.study_id == study_id,
@@ -303,6 +348,21 @@ class ForwardResearchService:
             )
         )
         if existing is not None:
+            same = (
+                existing.trade_id == trade_id
+                and _aware(existing.observed_at) == observed_at
+                and existing.side == side
+                and _same_decimal(existing.intended_quantity, intended_quantity)
+                and _same_decimal(existing.paper_filled_quantity, paper_filled_quantity)
+                and _same_decimal(existing.shadow_filled_quantity, shadow_filled_quantity)
+                and _same_optional_decimal(existing.paper_average_price, paper_average_price)
+                and _same_optional_decimal(existing.shadow_average_price, shadow_average_price)
+                and _same_decimal(existing.paper_cost_usd, paper_cost_usd)
+                and _same_decimal(existing.shadow_cost_usd, shadow_cost_usd)
+                and existing.metadata_json == metadata_json
+            )
+            if not same:
+                raise ForwardResearchError("conflicting retry for existing execution key")
             return existing
         row = ForwardExecutionRecord(
             study_id=study_id,
@@ -317,7 +377,7 @@ class ForwardResearchService:
             shadow_average_price=shadow_average_price,
             paper_cost_usd=paper_cost_usd,
             shadow_cost_usd=shadow_cost_usd,
-            metadata_json=_json(metadata or {}),
+            metadata_json=metadata_json,
         )
         db.add(row)
         db.commit()
@@ -339,12 +399,14 @@ class ForwardResearchService:
         study = ForwardResearchService.get_study(db, study_id)
         _active(study)
         resolved_at = _aware(resolved_at)
+        _reject_future(resolved_at, "forecast resolution")
         if resolved_at < _aware(study.started_at):
             raise ForwardResearchError("forecast resolution predates study start")
         if not external_key.strip() or probability < ZERO or probability > Decimal("1") or outcome not in {0, 1}:
             raise ForwardResearchError("forecast key/probability/outcome is invalid")
         if market_probability is not None and (market_probability < ZERO or market_probability > Decimal("1")):
             raise ForwardResearchError("market probability is invalid")
+        metadata_json = _json(metadata or {})
         existing = db.scalar(
             select(ForwardForecastRecord).where(
                 ForwardForecastRecord.study_id == study_id,
@@ -352,6 +414,15 @@ class ForwardResearchService:
             )
         )
         if existing is not None:
+            same = (
+                _aware(existing.resolved_at) == resolved_at
+                and _same_decimal(existing.probability, probability)
+                and int(existing.outcome) == outcome
+                and _same_optional_decimal(existing.market_probability, market_probability)
+                and existing.metadata_json == metadata_json
+            )
+            if not same:
+                raise ForwardResearchError("conflicting retry for existing forecast key")
             return existing
         row = ForwardForecastRecord(
             study_id=study_id,
@@ -360,7 +431,7 @@ class ForwardResearchService:
             probability=probability,
             outcome=outcome,
             market_probability=market_probability,
-            metadata_json=_json(metadata or {}),
+            metadata_json=metadata_json,
         )
         db.add(row)
         db.commit()
@@ -386,6 +457,7 @@ class ForwardResearchService:
         if not external_key.strip() or not code.strip() or not message.strip():
             raise ForwardResearchError("incident key/code/message are required")
         opened_at = _aware(opened_at)
+        _reject_future(opened_at, "incident open")
         if opened_at < _aware(study.started_at):
             raise ForwardResearchError("incident predates study start")
         existing = db.scalar(
@@ -395,6 +467,15 @@ class ForwardResearchService:
             )
         )
         if existing is not None:
+            same = (
+                existing.severity == severity
+                and existing.code == code
+                and existing.message == message
+                and bool(existing.data_integrity) == bool(data_integrity)
+                and _aware(existing.opened_at) == opened_at
+            )
+            if not same:
+                raise ForwardResearchError("conflicting retry for existing incident key")
             return existing
         row = ForwardStudyIncident(
             study_id=study_id,
@@ -421,8 +502,13 @@ class ForwardResearchService:
         if row is None:
             raise ForwardResearchError("incident not found")
         resolved_at = _aware(resolved_at)
+        _reject_future(resolved_at, "incident resolution")
         if resolved_at < _aware(row.opened_at):
             raise ForwardResearchError("incident resolution predates incident")
+        if row.resolved:
+            if row.resolved_at is not None and _aware(row.resolved_at) == resolved_at:
+                return row
+            raise ForwardResearchError("conflicting retry for incident resolution")
         row.resolved = True
         row.resolved_at = resolved_at
         db.commit()
@@ -433,8 +519,11 @@ class ForwardResearchService:
     def build_evaluation_input(db: Session, *, study_id: str, evaluated_at: datetime) -> tuple[EvaluationInput, StrategyVersion]:
         study = ForwardResearchService.get_study(db, study_id)
         evaluated_at = _aware(evaluated_at)
+        _reject_future(evaluated_at, "evaluation cutoff")
         if evaluated_at < _aware(study.started_at):
             raise ForwardResearchError("evaluation cutoff predates study start")
+        if study.completed_at is not None and evaluated_at > _aware(study.completed_at):
+            raise ForwardResearchError("evaluation cutoff cannot exceed completed study period")
         version = db.get(StrategyVersion, study.strategy_version_id)
         if version is None or not version.immutable:
             raise ForwardResearchError("study strategy version is missing or mutable")
@@ -561,10 +650,15 @@ class ForwardResearchService:
     @staticmethod
     def complete_study(db: Session, *, study_id: str, completed_at: datetime) -> ForwardStudy:
         study = ForwardResearchService.get_study(db, study_id)
-        _active(study)
         completed_at = _aware(completed_at)
+        _reject_future(completed_at, "study completion")
         if completed_at < _aware(study.started_at):
             raise ForwardResearchError("study completion predates start")
+        if study.status == "completed":
+            if study.completed_at is not None and _aware(study.completed_at) == completed_at:
+                return study
+            raise ForwardResearchError("conflicting retry for study completion")
+        _active(study)
         study.status = "completed"
         study.completed_at = completed_at
         db.commit()
