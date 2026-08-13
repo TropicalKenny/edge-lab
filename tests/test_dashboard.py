@@ -102,6 +102,17 @@ def _seed(db: Session):
                 resolved=False,
                 opened_at=datetime(2026, 8, 13, 5, tzinfo=timezone.utc),
             ),
+            ForwardStudyIncident(
+                study_id=study.id,
+                external_key="dashboard-integrity",
+                severity="critical",
+                code="DASHBOARD_INTEGRITY",
+                message="resolved operationally but permanently contaminates the frozen study",
+                data_integrity=True,
+                resolved=True,
+                opened_at=datetime(2026, 8, 12, 18, tzinfo=timezone.utc),
+                resolved_at=datetime(2026, 8, 12, 19, tzinfo=timezone.utc),
+            ),
         ]
     )
     db.commit()
@@ -121,19 +132,29 @@ def test_dashboard_summary_is_read_only_and_aggregates_research_state():
         assert response.status_code == 200
         payload = response.json()
         assert payload["mode"] == "read-only-dashboard"
+        assert payload["capital_scope"] == "independent-simulated-forward-study-bankrolls"
         assert payload["safety"] == {
             "can_trade_live": False,
             "can_sign": False,
             "can_move_funds": False,
             "vault_accessible": False,
             "signer_enabled": False,
+            "live_capital_usd": "0",
         }
+        assert payload["portfolio"]["label"] == "aggregate simulated research capital"
         assert payload["portfolio"]["study_count"] == 1
+        assert Decimal(payload["portfolio"]["simulated_latest_nav_usd"]) == Decimal("1012")
         assert Decimal(payload["portfolio"]["latest_nav_usd"]) == Decimal("1012")
         assert Decimal(payload["portfolio"]["net_pnl_usd"]) == Decimal("10")
         assert payload["portfolio"]["closed_trades"] == 1
+        assert payload["portfolio"]["unresolved_incidents"] == 1
+        assert payload["portfolio"]["permanent_data_integrity_incidents"] == 1
+        assert payload["portfolio"]["contaminated_study_count"] == 1
+        assert Decimal(payload["portfolio"]["worst_observed_study_drawdown_pct"]) == Decimal("0")
         assert payload["studies"][0]["study_id"] == study.id
         assert payload["studies"][0]["strategy_name"] == "Dashboard Test"
+        assert payload["studies"][0]["contaminated"] is True
+        assert payload["studies"][0]["data_integrity_incidents"] == 1
         assert len(payload["studies"][0]["nav_history"]) == 2
         assert payload["recent_trades"][0]["strategy_name"] == "Dashboard Test"
         assert payload["incidents"][0]["code"] == "DASHBOARD_WARNING"
@@ -142,7 +163,7 @@ def test_dashboard_summary_is_read_only_and_aggregates_research_state():
         db.close()
 
 
-def test_dashboard_page_and_assets_are_local_and_mobile_ready():
+def test_dashboard_page_and_assets_are_local_mobile_ready_and_explicitly_simulated():
     client = TestClient(app)
     page = client.get("/dashboard")
     css = client.get("/dashboard/assets/dashboard.css")
@@ -153,8 +174,12 @@ def test_dashboard_page_and_assets_are_local_and_mobile_ready():
     assert "/dashboard/assets/dashboard.js" in page.text
     assert "https://" not in page.text
     assert "http://" not in page.text
+    assert "Aggregate simulated NAV" in page.text
+    assert "Live capital" in page.text
+    assert "Every dollar shown as NAV" in page.text
     assert "@media(max-width:760px)" in css.text
     assert "fetch('/dashboard/api/summary'" in js.text
+    assert "live_capital_usd" in js.text
     assert "/execute" not in js.text
     assert "method:'POST'" not in js.text
 

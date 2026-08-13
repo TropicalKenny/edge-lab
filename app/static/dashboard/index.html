@@ -30,7 +30,7 @@
     <main class="content">
       <header class="topbar">
         <div>
-          <p class="eyebrow">Research portfolio</p>
+          <p class="eyebrow">Simulated research portfolio</p>
           <h1>Overview</h1>
         </div>
         <div class="top-actions">
@@ -42,12 +42,12 @@
 
       <section id="overview" class="section active-section">
         <div id="safety-banner" class="safety-banner">
-          <div><strong>Research mode</strong><span>Live trading, signing and treasury movement are disabled.</span></div>
+          <div><strong>Research mode</strong><span>Every dollar shown as NAV or P&amp;L is simulated. Live trading, signing and treasury movement are disabled.</span></div>
           <span class="mode-pill">READ ONLY</span>
         </div>
 
         <div class="metric-grid">
-          <article class="metric-card primary"><span>Combined study NAV</span><strong id="metric-nav">—</strong><small id="metric-return">—</small></article>
+          <article class="metric-card primary"><span>Aggregate simulated NAV</span><strong id="metric-nav">—</strong><small id="metric-return">—</small></article>
           <article class="metric-card"><span>Net research P&amp;L</span><strong id="metric-pnl">—</strong><small id="metric-trades">—</small></article>
           <article class="metric-card"><span>Forward studies</span><strong id="metric-studies">—</strong><small id="metric-active">—</small></article>
           <article class="metric-card"><span>Evidence health</span><strong id="metric-health">—</strong><small id="metric-incidents">—</small></article>
@@ -55,20 +55,21 @@
 
         <div class="dashboard-grid">
           <article class="panel chart-panel">
-            <div class="panel-head"><div><p class="eyebrow">Performance</p><h2>NAV progression</h2></div><span class="subtle">Last 60 observations / study</span></div>
-            <div id="nav-chart" class="chart" aria-label="NAV progression chart"></div>
+            <div class="panel-head"><div><p class="eyebrow">Independent simulations</p><h2>Study NAV progression</h2></div><span class="subtle">Last 60 observations / study</span></div>
+            <div id="nav-chart" class="chart" aria-label="Independent study NAV progression chart"></div>
             <div id="chart-legend" class="chart-legend"></div>
           </article>
           <article class="panel status-panel">
             <div class="panel-head"><div><p class="eyebrow">System</p><h2>Safety state</h2></div></div>
             <div class="safety-list">
+              <div><span>Live capital</span><strong id="metric-live-capital" class="safe">$0.00</strong></div>
               <div><span>Signer</span><strong class="safe">Disabled</strong></div>
               <div><span>Live orders</span><strong class="safe">Blocked</strong></div>
               <div><span>Fund movement</span><strong class="safe">Blocked</strong></div>
               <div><span>Vault access</span><strong class="safe">None</strong></div>
             </div>
             <div class="divider"></div>
-            <p class="panel-note">A strategy may become a <strong>GREEN-1 candidate</strong> only after its frozen forward-evidence gates pass. This screen cannot promote it or deploy capital.</p>
+            <p class="panel-note">Each strategy has its own simulated bankroll. Their NAVs are summed only for research visibility and do not represent money in your vault. A strategy may become a <strong>GREEN-1 candidate</strong> only after its frozen forward-evidence gates pass.</p>
           </article>
         </div>
 
@@ -90,7 +91,7 @@
       </section>
 
       <section id="strategies" class="section">
-        <div class="section-heading"><div><p class="eyebrow">Research engines</p><h2>Strategies</h2></div><p>Frozen forward studies and their current evidence state.</p></div>
+        <div class="section-heading"><div><p class="eyebrow">Research engines</p><h2>Strategies</h2></div><p>Frozen independent forward studies and their current evidence state.</p></div>
         <div id="strategy-detail-grid" class="strategy-detail-grid"></div>
       </section>
 
