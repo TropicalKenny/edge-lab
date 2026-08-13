@@ -37,6 +37,23 @@ It shows study NAV, research P&L, evidence state, forward progress, paper trades
 
 For VPS access, Dashboard V1 is designed to sit behind an owner-only **Cloudflare Access + Cloudflare Tunnel** route. PostgreSQL, Redis, workers and future signer services remain private.
 
+## Optional owner alerts
+
+Edge Lab includes a separate Telegram notification worker for critical/data-integrity incidents and evidence-state changes. Delivery is durable/idempotent with bounded retries and does not alter research state when Telegram is unavailable.
+
+Telegram is optional and notification-only. It requires:
+
+- `TELEGRAM_BOT_TOKEN`
+- `TELEGRAM_CHAT_ID`
+
+After the private research stack is running:
+
+```sh
+sh deploy/start-alerts.sh
+```
+
+Then send a one-time channel test using the command printed by the launcher. Telegram credentials are never wallet, signer, venue-order or withdrawal credentials.
+
 ## Local development
 
 ```sh
@@ -80,6 +97,12 @@ Start the authenticated Dashboard V1 tunnel:
 
 ```sh
 sh deploy/start-dashboard-tunnel.sh
+```
+
+Optional Telegram owner alerts:
+
+```sh
+sh deploy/start-alerts.sh
 ```
 
 Runtime verification:
