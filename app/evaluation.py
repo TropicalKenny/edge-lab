@@ -97,6 +97,15 @@ class EvaluationPolicy:
     def validate(self) -> None:
         if self.min_forward_days < 1:
             raise EvaluationError("min_forward_days must be positive")
+        for value in (
+            self.min_trades_default,
+            self.min_trades_funding,
+            self.min_trades_directional,
+            self.min_trades_meme,
+            self.min_forecasts_prediction,
+        ):
+            if value < 1:
+                raise EvaluationError("minimum observation counts must be positive")
         for name, value in (
             ("max_drawdown_pct", self.max_drawdown_pct),
             ("max_top3_profit_concentration", self.max_top3_profit_concentration),
@@ -176,7 +185,7 @@ def _percentile(values: Sequence[Decimal], q: Decimal) -> Decimal | None:
     ordered = sorted(values)
     if len(ordered) == 1:
         return ordered[0]
-    position = (Decimal(len(ordered) - 1) * q)
+    position = Decimal(len(ordered) - 1) * q
     lower = int(position)
     upper = min(lower + 1, len(ordered) - 1)
     fraction = position - Decimal(lower)
@@ -185,12 +194,7 @@ def _percentile(values: Sequence[Decimal], q: Decimal) -> Decimal | None:
 
 def _daily_returns(nav_series: tuple[NavObservation, ...]) -> list[Decimal]:
     ordered = sorted(nav_series, key=lambda item: _aware(item.observed_at))
-    returns: list[Decimal] = []
-    for previous, current in zip(ordered, ordered[1:]):
-        if previous.nav_usd <= ZERO or current.nav_usd <= ZERO:
-            continue
-        returns.append((current.nav_usd / previous.nav_usd) - ONE)
-    return returns
+    return [(current.nav_usd / previous.nav_usd) - ONE for previous, current in zip(ordered, ordered[1:])]
 
 
 def _risk_adjusted(returns: list[Decimal]) -> tuple[Decimal | None, Decimal | None]:
@@ -213,25 +217,19 @@ def _max_drawdown(nav_series: tuple[NavObservation, ...]) -> Decimal | None:
     if not nav_series:
         return None
     ordered = sorted(nav_series, key=lambda item: _aware(item.observed_at))
-    peak: Decimal | None = None
+    peak = ordered[0].nav_usd
     max_drawdown = ZERO
     for observation in ordered:
-        if observation.nav_usd <= ZERO:
-            continue
-        peak = observation.nav_usd if peak is None else max(peak, observation.nav_usd)
-        if peak > ZERO:
-            drawdown = (peak - observation.nav_usd) / peak
-            max_drawdown = max(max_drawdown, drawdown)
-    return max_drawdown if peak is not None else None
+        peak = max(peak, observation.nav_usd)
+        drawdown = (peak - observation.nav_usd) / peak
+        max_drawdown = max(max_drawdown, drawdown)
+    return max_drawdown
 
 
 def performance_metrics(evaluation: EvaluationInput, policy: EvaluationPolicy) -> PerformanceMetrics:
     start = _aware(evaluation.forward_started_at)
     end = _aware(evaluation.evaluated_at)
-    if end < start:
-        raise EvaluationError("evaluated_at cannot precede forward_started_at")
     forward_days = max(0, int((end - start).total_seconds() // 86400))
-
     trades = sorted(evaluation.trades, key=lambda item: _aware(item.closed_at))
     gross = sum((trade.gross_pnl_usd for trade in trades), ZERO)
     net = sum((trade.net_pnl_usd for trade in trades), ZERO)
@@ -246,9 +244,7 @@ def performance_metrics(evaluation: EvaluationInput, policy: EvaluationPolicy) -
     expectancy = net / Decimal(len(trades)) if trades else None
     average_win = total_wins / Decimal(len(winners)) if winners else None
     average_loss = sum(losers, ZERO) / Decimal(len(losers)) if losers else None
-    concentration = None
-    if total_wins > ZERO:
-        concentration = sum(sorted(winners, reverse=True)[:3], ZERO) / total_wins
+    concentration = sum(sorted(winners, reverse=True)[:3], ZERO) / total_wins if total_wins > ZERO else None
     sharpe, sortino = _risk_adjusted(_daily_returns(evaluation.nav_series))
     return PerformanceMetrics(
         forward_days=forward_days,
@@ -274,12 +270,9 @@ def execution_metrics(evaluation: EvaluationInput) -> ExecutionMetrics:
     divergences: list[Decimal] = []
     cost_underestimates: list[Decimal] = []
     for item in evaluation.executions:
-        if item.intended_quantity <= ZERO:
-            continue
         fill_ratios.append(min(ONE, max(ZERO, item.shadow_filled_quantity / item.intended_quantity)))
-        if item.paper_average_price is not None and item.shadow_average_price is not None and item.paper_average_price > ZERO:
-            divergence = abs(item.shadow_average_price - item.paper_average_price) / item.paper_average_price * BPS
-            divergences.append(divergence)
+        if item.paper_average_price is not None and item.shadow_average_price is not None:
+            divergences.append(abs(item.shadow_average_price - item.paper_average_price) / item.paper_average_price * BPS)
         cost_underestimates.append(item.shadow_cost_usd - item.paper_cost_usd)
     return ExecutionMetrics(
         observation_count=len(evaluation.executions),
@@ -298,22 +291,14 @@ def prediction_metrics(evaluation: EvaluationInput) -> PredictionMetrics:
     bins: dict[int, list[tuple[Decimal, int]]] = {}
     for forecast in evaluation.forecasts:
         p = forecast.probability
-        if p < ZERO or p > ONE or forecast.outcome not in (0, 1):
-            raise EvaluationError("forecast probability/outcome is invalid")
         outcome = Decimal(forecast.outcome)
         brier_values.append((p - outcome) ** 2)
         clipped = min(ONE - EPS, max(EPS, p))
-        if forecast.outcome == 1:
-            log_losses.append(_to_decimal(-math.log(float(clipped))))
-        else:
-            log_losses.append(_to_decimal(-math.log(float(ONE - clipped))))
+        log_losses.append(_to_decimal(-math.log(float(clipped if forecast.outcome == 1 else ONE - clipped))))
         bin_index = min(9, int(p * Decimal("10")))
         bins.setdefault(bin_index, []).append((p, forecast.outcome))
         if forecast.market_probability is not None:
-            market_p = forecast.market_probability
-            if market_p < ZERO or market_p > ONE:
-                raise EvaluationError("market probability is invalid")
-            market_brier.append((market_p - outcome) ** 2)
+            market_brier.append((forecast.market_probability - outcome) ** 2)
 
     calibration = ZERO
     count = Decimal(len(brier_values))
@@ -340,31 +325,72 @@ class EvidenceEvaluator:
         policy.validate()
         self.policy = policy
 
-    def evaluate(self, evaluation: EvaluationInput) -> EvaluationResult:
+    @staticmethod
+    def _validate_input(evaluation: EvaluationInput) -> None:
         if not evaluation.strategy_slug.strip() or not evaluation.strategy_version.strip():
             raise EvaluationError("strategy slug and version are required")
         if evaluation.unresolved_critical_incidents < 0 or evaluation.data_integrity_failures < 0:
             raise EvaluationError("incident counters cannot be negative")
+        start = _aware(evaluation.forward_started_at)
+        end = _aware(evaluation.evaluated_at)
+        if end < start:
+            raise EvaluationError("evaluated_at cannot precede forward_started_at")
+        timestamps = [item.observed_at for item in evaluation.nav_series]
+        timestamps += [item.closed_at for item in evaluation.trades]
+        timestamps += [item.observed_at for item in evaluation.executions]
+        timestamps += [item.resolved_at for item in evaluation.forecasts]
+        if any(_aware(value) < start or _aware(value) > end for value in timestamps):
+            raise EvaluationError("all evidence observations must fall inside the declared forward window")
+        if any(item.nav_usd <= ZERO for item in evaluation.nav_series):
+            raise EvaluationError("NAV observations must be positive")
+        for trade in evaluation.trades:
+            if trade.fees_usd < ZERO or trade.slippage_usd < ZERO:
+                raise EvaluationError("trade costs cannot be negative")
+            if trade.allocated_capital_usd <= ZERO or trade.planned_loss_usd <= ZERO:
+                raise EvaluationError("trade allocated capital and planned loss must be positive")
+        for item in evaluation.executions:
+            if item.intended_quantity <= ZERO or item.paper_filled_quantity < ZERO or item.shadow_filled_quantity < ZERO:
+                raise EvaluationError("execution quantities are invalid")
+            if item.paper_average_price is not None and item.paper_average_price <= ZERO:
+                raise EvaluationError("paper average price must be positive")
+            if item.shadow_average_price is not None and item.shadow_average_price <= ZERO:
+                raise EvaluationError("shadow average price must be positive")
+            if item.paper_cost_usd < ZERO or item.shadow_cost_usd < ZERO:
+                raise EvaluationError("execution costs cannot be negative")
+        for forecast in evaluation.forecasts:
+            if forecast.probability < ZERO or forecast.probability > ONE or forecast.outcome not in (0, 1):
+                raise EvaluationError("forecast probability/outcome is invalid")
+            if forecast.market_probability is not None and (forecast.market_probability < ZERO or forecast.market_probability > ONE):
+                raise EvaluationError("market probability is invalid")
 
+    def evaluate(self, evaluation: EvaluationInput) -> EvaluationResult:
+        self._validate_input(evaluation)
         performance = performance_metrics(evaluation, self.policy)
         execution = execution_metrics(evaluation)
         prediction = prediction_metrics(evaluation)
         red: list[str] = []
         amber: list[str] = []
-
         if evaluation.data_integrity_failures > 0:
             red.append("DATA_INTEGRITY_FAILURE")
         if evaluation.unresolved_critical_incidents > 0:
             red.append("UNRESOLVED_CRITICAL_INCIDENT")
-        if performance.net_pnl_usd <= ZERO and performance.trade_count > 0:
+        if performance.trade_count == 0:
+            amber.append("NO_CLOSED_TRADES")
+        elif performance.net_pnl_usd <= ZERO:
             red.append("NON_POSITIVE_NET_PNL")
-        if performance.stressed_net_pnl_usd <= ZERO and performance.trade_count > 0:
+        if performance.trade_count > 0 and performance.stressed_net_pnl_usd <= ZERO:
             red.append("FAILS_COST_STRESS")
-        if performance.max_drawdown_pct is not None and performance.max_drawdown_pct > self.policy.max_drawdown_pct:
+        if len(evaluation.nav_series) < 2:
+            amber.append("INSUFFICIENT_NAV_SERIES")
+        elif performance.max_drawdown_pct is not None and performance.max_drawdown_pct > self.policy.max_drawdown_pct:
             red.append("MAX_DRAWDOWN_EXCEEDED")
-
         if performance.forward_days < self.policy.min_forward_days:
             amber.append("INSUFFICIENT_FORWARD_DAYS")
+        if performance.trade_count > 0:
+            if performance.profit_factor is None or performance.profit_factor < self.policy.min_profit_factor:
+                amber.append("PROFIT_FACTOR_BELOW_GATE")
+            if performance.top3_profit_concentration is not None and performance.top3_profit_concentration > self.policy.max_top3_profit_concentration:
+                amber.append("PROFIT_TOO_CONCENTRATED")
         if evaluation.family == "prediction":
             if prediction.forecast_count < self.policy.min_forecasts_prediction:
                 amber.append("INSUFFICIENT_RESOLVED_FORECASTS")
@@ -374,38 +400,24 @@ class EvidenceEvaluator:
                 amber.append("MISSING_MARKET_BRIER_BASELINE")
             elif prediction.brier_improvement_vs_market is None or prediction.brier_improvement_vs_market <= ZERO:
                 amber.append("DOES_NOT_BEAT_MARKET_BRIER")
-        else:
-            if performance.trade_count < self.policy.min_trade_count(evaluation.family):
-                amber.append("INSUFFICIENT_TRADE_SAMPLE")
-            if performance.profit_factor is None or performance.profit_factor < self.policy.min_profit_factor:
-                amber.append("PROFIT_FACTOR_BELOW_GATE")
-            if (
-                performance.top3_profit_concentration is not None
-                and performance.top3_profit_concentration > self.policy.max_top3_profit_concentration
-            ):
-                amber.append("PROFIT_TOO_CONCENTRATED")
-
+        elif performance.trade_count < self.policy.min_trade_count(evaluation.family):
+            amber.append("INSUFFICIENT_TRADE_SAMPLE")
         if execution.observation_count == 0:
             amber.append("NO_SHADOW_EXECUTION_SAMPLE")
         else:
             if execution.mean_shadow_fill_ratio is None or execution.mean_shadow_fill_ratio < self.policy.min_shadow_fill_ratio:
                 amber.append("SHADOW_FILL_RATIO_BELOW_GATE")
-            if (
-                execution.p90_absolute_price_divergence_bps is None
-                or execution.p90_absolute_price_divergence_bps > self.policy.max_shadow_p90_price_divergence_bps
-            ):
+            if execution.p90_absolute_price_divergence_bps is None or execution.p90_absolute_price_divergence_bps > self.policy.max_shadow_p90_price_divergence_bps:
                 amber.append("PAPER_SHADOW_PRICE_DIVERGENCE")
-
         if red:
             recommendation: Literal["RED", "AMBER", "GREEN-1_CANDIDATE"] = "RED"
-            reasons = tuple(red + amber)
+            reasons = tuple(dict.fromkeys(red + amber))
         elif amber:
             recommendation = "AMBER"
-            reasons = tuple(amber)
+            reasons = tuple(dict.fromkeys(amber))
         else:
             recommendation = "GREEN-1_CANDIDATE"
             reasons = ("ALL_PRE_REGISTERED_FORWARD_GATES_PASSED",)
-
         return EvaluationResult(
             recommendation=recommendation,
             reasons=reasons,
