@@ -99,6 +99,7 @@ def test_existing_allocations_reduce_remaining_authorized_capital():
         s, [candidate("a", notional="100", loss="1")], run_id="run"
     )
     assert result.newly_allocated_notional_usd == D("50")
+    assert result.total_allocated_notional_usd == D("300")
     assert "SIZED_DOWN_BY_PORTFOLIO_LIMITS" in result.decisions[0].reasons
 
 
@@ -142,11 +143,67 @@ def test_known_low_cost_route_creates_proposal_only_and_never_executes():
     assert proposal.source == "solana_working_treasury"
 
 
+def test_treasury_proposal_cannot_spend_protected_reserve():
+    allocator = PortfolioAllocator(policy(max_strategy_notional_pct=D("0.50")))
+    route = TransferCost("solana_working_treasury", "hyperliquid", fixed_cost_usd=D("0.10"))
+    result = allocator.allocate(state(), [candidate("a", notional="100", loss="1")], transfer_costs=[route], run_id="reserve")
+    assert result.reserve_floor_usd == D("200")
+    assert len(result.treasury_proposals) == 1
+    proposal = result.treasury_proposals[0]
+    assert proposal.amount_usd == D("100")
+    assert D("300") - proposal.amount_usd >= result.reserve_floor_usd
+
+
 def test_expensive_transfer_route_is_rejected():
     allocator = PortfolioAllocator(policy(max_strategy_notional_pct=D("0.50"), max_transfer_cost_pct=D("0.001")))
     route = TransferCost("solana_working_treasury", "hyperliquid", fixed_cost_usd=D("10"))
     result = allocator.allocate(state(), [candidate("a", notional="100", loss="1")], transfer_costs=[route], run_id="run")
     assert result.treasury_proposals == ()
+
+
+def test_negative_existing_exposure_fails_closed():
+    allocator = PortfolioAllocator(policy())
+    with pytest.raises(AllocationError, match="negative values"):
+        allocator.allocate(
+            state(
+                existing_allocated_notional_usd=D("10"),
+                existing_venue_notional_usd={"hyperliquid": D("-1")},
+            ),
+            [candidate("a")],
+            run_id="bad-negative",
+        )
+
+
+def test_inconsistent_existing_exposure_maps_fail_closed():
+    allocator = PortfolioAllocator(policy())
+    with pytest.raises(AllocationError, match="venue notionals"):
+        allocator.allocate(
+            state(
+                existing_allocated_notional_usd=D("50"),
+                existing_venue_notional_usd={"hyperliquid": D("60")},
+            ),
+            [candidate("a")],
+            run_id="bad-map",
+        )
+    with pytest.raises(AllocationError, match="bucket risk"):
+        allocator.allocate(
+            state(
+                existing_global_risk_usd=D("5"),
+                existing_bucket_risk_usd={"crypto-beta": D("6")},
+            ),
+            [candidate("a")],
+            run_id="bad-risk-map",
+        )
+
+
+def test_vault_and_authorized_working_capital_cannot_overlap_past_nav():
+    allocator = PortfolioAllocator(policy())
+    with pytest.raises(AllocationError, match="cannot exceed NAV"):
+        allocator.allocate(
+            state(vault_usd=D("600"), authorized_working_capital_usd=D("500")),
+            [candidate("a")],
+            run_id="overlap",
+        )
 
 
 def test_allocation_api_persists_auditable_run_and_proposal():
