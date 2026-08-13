@@ -16,6 +16,8 @@ set +a
 
 : "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}"
 : "${FORWARD_INGEST_SECRET:?FORWARD_INGEST_SECRET is required}"
+: "${HELIUS_API_KEY:?HELIUS_API_KEY is required for Solana forward research}"
+: "${JUPITER_API_KEY:?JUPITER_API_KEY is required for quote-only Solana forward research}"
 
 if [ "$POSTGRES_PASSWORD" = "replace-with-a-long-random-password" ] || \
    [ "$FORWARD_INGEST_SECRET" = "replace-with-a-separate-long-random-secret" ]; then
@@ -34,12 +36,21 @@ docker compose \
   --env-file "$ENV_FILE" \
   -f docker-compose.yml \
   -f deploy/compose.forward.yml \
+  -f deploy/compose.solana-forward.yml \
   --profile forward \
-  up -d --build postgres redis migrate api hyperliquid-collector hyperliquid-forward-bootstrap hyperliquid-forward-runner polymarket-collector polymarket-forward-bootstrap polymarket-forward-runner forward-evaluator db-backup
+  --profile solana \
+  up -d --build \
+    postgres redis migrate api \
+    hyperliquid-collector hyperliquid-forward-bootstrap hyperliquid-forward-runner \
+    polymarket-collector polymarket-forward-bootstrap polymarket-forward-runner \
+    solana-launch-collector solana-forensic-sampler solana-forward-bootstrap solana-forward-runner \
+    forward-evaluator db-backup
 
 docker compose \
   --env-file "$ENV_FILE" \
   -f docker-compose.yml \
   -f deploy/compose.forward.yml \
+  -f deploy/compose.solana-forward.yml \
   --profile forward \
+  --profile solana \
   ps

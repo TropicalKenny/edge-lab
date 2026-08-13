@@ -4,22 +4,29 @@ This milestone prepares the paper/shadow research system for an unattended VPS r
 
 ## Security posture
 
-- `SIGNER_ENABLED=false` is forced by the launcher and Compose overlay.
+- `SIGNER_ENABLED=false` is forced by the launcher and Compose overlays.
 - PostgreSQL and Redis are not published to the host network.
 - The API is bound to `127.0.0.1:8000`, not the public internet.
 - Database and forward-ingest secrets are required and have no committed defaults.
 - Provider credentials are research/data credentials only; wallet/signing keys are not part of this deployment.
 - The owner vault remains outside the VPS.
+- Solana uses Helius data plus Jupiter price-only `/order` requests without a taker; there is no `/execute` path in Edge Lab.
 
 ## VPS start
 
 ```bash
 cp deploy/.env.forward.example deploy/.env.forward
-# replace both required secrets
+# replace the required secrets and research API keys
 sh deploy/start-forward.sh
 ```
 
-The forward profile starts:
+The launcher now composes three files:
+
+- `docker-compose.yml`
+- `deploy/compose.forward.yml`
+- `deploy/compose.solana-forward.yml`
+
+The forward research stack starts:
 
 - PostgreSQL
 - Redis
@@ -31,14 +38,18 @@ The forward profile starts:
 - Polymarket public structural collector
 - idempotent frozen Polymarket structural forward-study bootstrap
 - operational Polymarket immediate-structural paper-shadow runner
+- Helius chain-native Solana Pump launch collector
+- bounded Solana forensic enrichment sampler
+- idempotent frozen Solana Pump baseline forward-study bootstrap
+- operational Solana quote-only paper-shadow runner
 - shared daily recommendation-only forward evaluator
 - six-hour PostgreSQL backup loop
 
-The hardened overlay supplies the same secret-derived PostgreSQL URL to both venue bootstraps, both venue runners, and the evaluator. Every forward service explicitly keeps `SIGNER_ENABLED=false`.
+The hardened overlays supply the same secret-derived PostgreSQL URL to all bootstraps/runners and the evaluator. Every forward service explicitly keeps `SIGNER_ENABLED=false`.
 
 Each venue runner depends on its own successful one-shot bootstrap. The shared evaluator depends only on successful database migration, so a failed or intentionally disabled venue bootstrap cannot suppress evidence scoring for another already-active study.
 
-Solana workers remain a separate opt-in profile because Helius/Jupiter provider credentials and throughput decisions are not required for the Hyperliquid or Polymarket forward studies.
+The Solana forward stack requires `HELIUS_API_KEY` and `JUPITER_API_KEY`. These are research/API credentials, not wallet keys. `GOPLUS_ACCESS_TOKEN` remains optional; if required security evidence cannot be obtained, that candidate simply cannot qualify for the baseline entry policy.
 
 ## Health checks
 
@@ -58,7 +69,17 @@ python -m app.polymarket_forward_ops status \
   --require-ready
 ```
 
-Both checks are database/read-only operational checks. They do not submit an order or require a signer. Docker uses each venue-specific command as that runner's healthcheck.
+Solana runner readiness:
+
+```bash
+python -m app.solana_forward_ops status \
+  --external-id solana-pump-baseline-m6g-v1 \
+  --require-ready
+```
+
+All three checks are database/read-only operational checks. They do not submit an order or require a signer. Docker uses each venue-specific command as that runner's healthcheck.
+
+The Solana health check additionally fails closed on corrupted open-position journal metadata, frozen lineage mismatch, permanent data-integrity contamination, unresolved critical incidents, missing initial NAV, or a stale executable-liquidation NAV heartbeat.
 
 ## Backup
 
@@ -70,9 +91,11 @@ Manual backup:
 sh deploy/backup-now.sh
 ```
 
-## Network exposure
+## Network exposure and dashboard
 
-The Compose deployment intentionally exposes only the API on loopback. If remote viewing is later needed, put an authenticated tunnel/reverse proxy in front of it; do not expose PostgreSQL, Redis, or the raw API directly.
+The Compose deployment intentionally exposes only the API on loopback. PostgreSQL, Redis, collectors and forward workers stay private.
+
+The planned Dashboard V1 will sit in front of this private backend and be exposed through an authenticated tunnel/reverse proxy (for example Cloudflare Tunnel + Access), so the owner can monitor Edge Lab from phone/tablet/laptop without exposing the internal services. Until that dashboard is added, do not publish the raw API directly to the internet.
 
 ## Before a forward clock is trusted
 
