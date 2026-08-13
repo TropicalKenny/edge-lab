@@ -21,7 +21,7 @@ from app.venues.solana_models import SolanaLaunchEvent
 
 app = FastAPI(
     title="Edge Lab",
-    version="0.4.0",
+    version="0.6.3",
     description="Quant research core. Live signing and venue order submission are disabled.",
 )
 settings = get_settings()
@@ -167,3 +167,15 @@ async def solana_jupiter_shadow(input_mint: str, output_mint: str, amount: int=Q
 @app.post("/venues/solana/labels/{mint}/resolve")
 def solana_resolve_labels(mint: str, db: Session=Depends(get_db)):
     return {"mint": mint, "labels_created": ForwardLabelService.resolve(db, mint=mint)}
+
+
+# Compose milestone routers last so the core app remains importable in isolation.
+from app.evaluation_api import router as evaluation_router
+from app.forward_api import router as forward_router
+from app.forward_ops_api import router as forward_ops_router
+from app.portfolio_api import router as portfolio_router
+
+app.include_router(evaluation_router)
+app.include_router(forward_router)
+app.include_router(forward_ops_router)
+app.include_router(portfolio_router)
