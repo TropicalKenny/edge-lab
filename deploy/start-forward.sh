@@ -35,7 +35,7 @@ docker compose \
   -f docker-compose.yml \
   -f deploy/compose.forward.yml \
   --profile forward \
-  up -d --build postgres redis migrate api hyperliquid-collector hyperliquid-forward-bootstrap hyperliquid-forward-runner forward-evaluator polymarket-collector db-backup
+  up -d --build postgres redis migrate api hyperliquid-collector hyperliquid-forward-bootstrap hyperliquid-forward-runner polymarket-collector polymarket-forward-bootstrap polymarket-forward-runner forward-evaluator db-backup
 
 docker compose \
   --env-file "$ENV_FILE" \
