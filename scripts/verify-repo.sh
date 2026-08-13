@@ -18,7 +18,7 @@ printf '%s\n' '==> compile'
 python -m compileall -q app tests
 
 printf '%s\n' '==> fresh Alembic migration'
-DATABASE_URL="sqlite:///$TMP_DB" alembic upgrade head >/dev/null
+DATABASE_URL="sqlite:///$TMP_DB" python -m alembic upgrade head >/dev/null
 
 if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
   printf '%s\n' '==> full Docker Compose render'
