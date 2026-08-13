@@ -50,13 +50,6 @@ services:
       HYPERLIQUID_FORWARD_POLL_SECONDS: "300"
     restart: unless-stopped
 
-  forward-evaluator:
-    environment:
-      DATABASE_URL: postgresql+psycopg://edge:${POSTGRES_PASSWORD}@postgres:5432/edge
-      SIGNER_ENABLED: "false"
-      FORWARD_EVALUATION_POLL_SECONDS: ${FORWARD_EVALUATION_POLL_SECONDS:-3600}
-    restart: unless-stopped
-
   polymarket-collector:
     environment:
       DATABASE_URL: postgresql+psycopg://edge:${POSTGRES_PASSWORD}@postgres:5432/edge
@@ -65,6 +58,27 @@ services:
       POLYMARKET_SCAN_SECONDS: "60"
       POLYMARKET_MAX_MARKETS: "50"
       POLYMARKET_MAX_NEGRISK_EVENTS: "8"
+    restart: unless-stopped
+
+  polymarket-forward-bootstrap:
+    environment:
+      DATABASE_URL: postgresql+psycopg://edge:${POSTGRES_PASSWORD}@postgres:5432/edge
+      SIGNER_ENABLED: "false"
+
+  polymarket-forward-runner:
+    environment:
+      DATABASE_URL: postgresql+psycopg://edge:${POSTGRES_PASSWORD}@postgres:5432/edge
+      REDIS_URL: redis://redis:6379/0
+      SIGNER_ENABLED: "false"
+      POLYMARKET_TIMEOUT_SECONDS: ${POLYMARKET_TIMEOUT_SECONDS:-10}
+      POLYMARKET_FORWARD_POLL_SECONDS: ${POLYMARKET_FORWARD_POLL_SECONDS:-60}
+    restart: unless-stopped
+
+  forward-evaluator:
+    environment:
+      DATABASE_URL: postgresql+psycopg://edge:${POSTGRES_PASSWORD}@postgres:5432/edge
+      SIGNER_ENABLED: "false"
+      FORWARD_EVALUATION_POLL_SECONDS: ${FORWARD_EVALUATION_POLL_SECONDS:-3600}
     restart: unless-stopped
 
   db-backup:
