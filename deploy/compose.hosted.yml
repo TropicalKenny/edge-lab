@@ -1,4 +1,9 @@
 services:
+  postgres:
+    networks:
+      - default
+      - dashboard_data
+
   dashboard-db-role:
     image: postgres:16-alpine
     environment:
@@ -21,7 +26,7 @@ services:
       migrate:
         condition: service_completed_successfully
     networks:
-      - default
+      - dashboard_data
     restart: "no"
 
   dashboard:
@@ -44,7 +49,7 @@ services:
       retries: 3
       start_period: 30s
     networks:
-      - default
+      - dashboard_data
       - dashboard_edge
     ports: []
     cap_drop:
@@ -74,5 +79,7 @@ services:
     restart: unless-stopped
 
 networks:
+  dashboard_data:
+    internal: true
   dashboard_edge:
     driver: bridge
