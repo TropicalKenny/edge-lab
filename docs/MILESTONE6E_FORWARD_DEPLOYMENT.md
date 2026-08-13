@@ -26,9 +26,13 @@ The forward profile starts:
 - Alembic migration job
 - API / read-only observability
 - Hyperliquid public-data collector
-- strict Hyperliquid funding/carry forward runner
+- idempotent frozen Hyperliquid forward-study bootstrap
+- operational Hyperliquid funding/carry paper-shadow runner
+- daily recommendation-only forward evaluator
 - Polymarket public structural collector
 - six-hour PostgreSQL backup loop
+
+The hardened overlay supplies the same secret-derived PostgreSQL URL to the bootstrap, runner and evaluator. The launcher explicitly includes the bootstrap and evaluator, so the VPS deployment cannot accidentally run a forward worker without registering its frozen study or omit daily evidence scoring.
 
 Solana workers remain a separate opt-in profile because Helius/Jupiter provider credentials and throughput decisions are not required to begin the Hyperliquid forward study.
 
@@ -50,9 +54,10 @@ The Compose deployment intentionally exposes only the API on loopback. If remote
 
 1. Deploy and confirm containers stay healthy for at least 24 hours.
 2. Verify automatic backups can be restored to a disposable database.
-3. Register immutable strategy versions and experiments.
-4. Create frozen forward studies with their evaluation policy/config snapshot.
+3. Confirm the idempotent bootstrap created the immutable strategy/version/experiment and frozen study exactly once.
+4. Confirm `python -m app.forward_ops status --require-ready` reports the study ready after fresh market observations arrive.
 5. Confirm `/forward/ops/summary` shows fresh NAV observations and no unresolved data-integrity incident.
-6. Only then record the official forward-study start time.
+6. Confirm the forward evaluator is producing recommendation-only audit rows without changing `Strategy.status`.
+7. Only then treat the stored study start timestamp as the official forward-research clock.
 
 No result from this deployment can authorize capital or enable a signer. Promotion remains an evidence recommendation only.
