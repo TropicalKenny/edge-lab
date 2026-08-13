@@ -73,6 +73,8 @@ class EvaluationInput:
 @dataclass(frozen=True)
 class EvaluationPolicy:
     min_forward_days: int = 90
+    min_nav_observations: int = 60
+    min_shadow_observations: int = 30
     min_trades_default: int = 100
     min_trades_funding: int = 60
     min_trades_directional: int = 100
@@ -96,9 +98,10 @@ class EvaluationPolicy:
         return self.min_trades_default
 
     def validate(self) -> None:
-        if self.min_forward_days < 1:
-            raise EvaluationError("min_forward_days must be positive")
         for value in (
+            self.min_forward_days,
+            self.min_nav_observations,
+            self.min_shadow_observations,
             self.min_trades_default,
             self.min_trades_funding,
             self.min_trades_directional,
@@ -106,7 +109,7 @@ class EvaluationPolicy:
             self.min_forecasts_prediction,
         ):
             if value < 1:
-                raise EvaluationError("minimum observation counts must be positive")
+                raise EvaluationError("minimum evidence counts must be positive")
         for name, value in (
             ("max_drawdown_pct", self.max_drawdown_pct),
             ("max_top3_profit_concentration", self.max_top3_profit_concentration),
@@ -126,6 +129,7 @@ class EvaluationPolicy:
 @dataclass(frozen=True)
 class PerformanceMetrics:
     forward_days: int
+    nav_observation_count: int
     trade_count: int
     gross_pnl_usd: Decimal
     net_pnl_usd: Decimal
@@ -194,7 +198,6 @@ def _percentile(values: Sequence[Decimal], q: Decimal) -> Decimal | None:
 
 
 def _daily_equivalent_returns(nav_series: tuple[NavObservation, ...]) -> list[Decimal]:
-    """Normalize irregular NAV intervals to daily-equivalent returns before annualization."""
     ordered = sorted(nav_series, key=lambda item: _aware(item.observed_at))
     returns: list[Decimal] = []
     for previous, current in zip(ordered, ordered[1:]):
@@ -202,8 +205,7 @@ def _daily_equivalent_returns(nav_series: tuple[NavObservation, ...]) -> list[De
         if elapsed_days <= 0:
             continue
         ratio = float(current.nav_usd / previous.nav_usd)
-        daily_return = math.pow(ratio, 1.0 / elapsed_days) - 1.0
-        returns.append(_to_decimal(daily_return))
+        returns.append(_to_decimal(math.pow(ratio, 1.0 / elapsed_days) - 1.0))
     return returns
 
 
@@ -258,6 +260,7 @@ def performance_metrics(evaluation: EvaluationInput, policy: EvaluationPolicy) -
     sharpe, sortino = _risk_adjusted(_daily_equivalent_returns(evaluation.nav_series))
     return PerformanceMetrics(
         forward_days=forward_days,
+        nav_observation_count=len(evaluation.nav_series),
         trade_count=len(trades),
         gross_pnl_usd=gross,
         net_pnl_usd=net,
@@ -317,12 +320,7 @@ def prediction_metrics(evaluation: EvaluationInput) -> PredictionMetrics:
         actual_rate = Decimal(sum(value[1] for value in values)) / Decimal(len(values))
         calibration += abs(average_p - actual_rate) * Decimal(len(values)) / count
     brier = sum(brier_values, ZERO) / count
-    # A market benchmark is valid only when every forecast has a same-event market probability.
-    market = (
-        sum(market_brier, ZERO) / Decimal(len(market_brier))
-        if len(market_brier) == len(brier_values)
-        else None
-    )
+    market = sum(market_brier, ZERO) / Decimal(len(market_brier)) if len(market_brier) == len(brier_values) else None
     return PredictionMetrics(
         forecast_count=len(brier_values),
         brier_score=brier,
@@ -350,20 +348,17 @@ class EvidenceEvaluator:
         end = _aware(evaluation.evaluated_at)
         if end < start:
             raise EvaluationError("evaluated_at cannot precede forward_started_at")
-
         timestamps = [item.observed_at for item in evaluation.nav_series]
         timestamps += [item.closed_at for item in evaluation.trades]
         timestamps += [item.observed_at for item in evaluation.executions]
         timestamps += [item.resolved_at for item in evaluation.forecasts]
         if any(_aware(value) < start or _aware(value) > end for value in timestamps):
             raise EvaluationError("all evidence observations must fall inside the declared forward window")
-
         nav_times = [_aware(item.observed_at) for item in evaluation.nav_series]
         if len(nav_times) != len(set(nav_times)):
             raise EvaluationError("NAV observations cannot share a timestamp")
         if any(item.nav_usd <= ZERO for item in evaluation.nav_series):
             raise EvaluationError("NAV observations must be positive")
-
         for trade in evaluation.trades:
             if trade.fees_usd < ZERO or trade.slippage_usd < ZERO:
                 raise EvaluationError("trade costs cannot be negative")
@@ -374,7 +369,6 @@ class EvidenceEvaluator:
             expected_net = trade.gross_pnl_usd - trade.fees_usd - trade.slippage_usd
             if abs(trade.net_pnl_usd - expected_net) > PNL_TOLERANCE:
                 raise EvaluationError("trade net PnL must reconcile to gross PnL minus costs")
-
         for item in evaluation.executions:
             if item.intended_quantity <= ZERO or item.paper_filled_quantity < ZERO or item.shadow_filled_quantity < ZERO:
                 raise EvaluationError("execution quantities are invalid")
@@ -386,7 +380,6 @@ class EvidenceEvaluator:
                 raise EvaluationError("shadow average price must be positive")
             if item.paper_cost_usd < ZERO or item.shadow_cost_usd < ZERO:
                 raise EvaluationError("execution costs cannot be negative")
-
         for forecast in evaluation.forecasts:
             if forecast.probability < ZERO or forecast.probability > ONE or forecast.outcome not in (0, 1):
                 raise EvaluationError("forecast probability/outcome is invalid")
@@ -411,10 +404,14 @@ class EvidenceEvaluator:
             red.append("NON_POSITIVE_NET_PNL")
         if performance.trade_count > 0 and performance.stressed_net_pnl_usd <= ZERO:
             red.append("FAILS_COST_STRESS")
-        if len(evaluation.nav_series) < 2:
+
+        if performance.nav_observation_count < 2:
             amber.append("INSUFFICIENT_NAV_SERIES")
-        elif performance.max_drawdown_pct is not None and performance.max_drawdown_pct > self.policy.max_drawdown_pct:
-            red.append("MAX_DRAWDOWN_EXCEEDED")
+        else:
+            if performance.nav_observation_count < self.policy.min_nav_observations:
+                amber.append("INSUFFICIENT_NAV_OBSERVATIONS")
+            if performance.max_drawdown_pct is not None and performance.max_drawdown_pct > self.policy.max_drawdown_pct:
+                red.append("MAX_DRAWDOWN_EXCEEDED")
         if performance.forward_days < self.policy.min_forward_days:
             amber.append("INSUFFICIENT_FORWARD_DAYS")
 
@@ -439,6 +436,8 @@ class EvidenceEvaluator:
         if execution.observation_count == 0:
             amber.append("NO_SHADOW_EXECUTION_SAMPLE")
         else:
+            if execution.observation_count < self.policy.min_shadow_observations:
+                amber.append("INSUFFICIENT_SHADOW_SAMPLE")
             if execution.mean_shadow_fill_ratio is None or execution.mean_shadow_fill_ratio < self.policy.min_shadow_fill_ratio:
                 amber.append("SHADOW_FILL_RATIO_BELOW_GATE")
             if execution.p90_absolute_price_divergence_bps is None or execution.p90_absolute_price_divergence_bps > self.policy.max_shadow_p90_price_divergence_bps:
@@ -453,7 +452,6 @@ class EvidenceEvaluator:
         else:
             recommendation = "GREEN-1_CANDIDATE"
             reasons = ("ALL_PRE_REGISTERED_FORWARD_GATES_PASSED",)
-
         return EvaluationResult(
             recommendation=recommendation,
             reasons=reasons,
