@@ -51,6 +51,8 @@ class Settings(BaseSettings):
     treasury_min_rebalance_usd: float = 25.0
     treasury_max_transfer_cost_pct: float = 0.005
     evaluation_min_forward_days: int = 90
+    evaluation_min_nav_observations: int = 60
+    evaluation_min_shadow_observations: int = 30
     evaluation_min_trades_default: int = 100
     evaluation_min_trades_funding: int = 60
     evaluation_min_trades_directional: int = 100
