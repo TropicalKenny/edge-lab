@@ -27,6 +27,8 @@ class HyperliquidCarryPosition(Base):
     target_close_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
+    # Reference marks are kept separate from executable paper fills so slippage
+    # can be measured once and never double-counted inside price PnL.
     entry_spot_mid: Mapped[Decimal] = mapped_column(Numeric(28, 10))
     entry_perp_mid: Mapped[Decimal] = mapped_column(Numeric(28, 10))
     entry_spot_price: Mapped[Decimal] = mapped_column(Numeric(28, 10))
@@ -36,10 +38,33 @@ class HyperliquidCarryPosition(Base):
     entry_spot_slippage_usd: Mapped[Decimal] = mapped_column(Numeric(28, 10))
     entry_perp_slippage_usd: Mapped[Decimal] = mapped_column(Numeric(28, 10))
 
+    # Delayed book observations are shadow evidence only. They never replace the
+    # paper entry; they measure whether the paper model was actually executable.
+    entry_shadow_observed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    entry_shadow_spot_filled_quantity: Mapped[Decimal | None] = mapped_column(Numeric(28, 10))
+    entry_shadow_perp_filled_quantity: Mapped[Decimal | None] = mapped_column(Numeric(28, 10))
+    entry_shadow_spot_price: Mapped[Decimal | None] = mapped_column(Numeric(28, 10))
+    entry_shadow_perp_price: Mapped[Decimal | None] = mapped_column(Numeric(28, 10))
+    entry_shadow_spot_cost_usd: Mapped[Decimal | None] = mapped_column(Numeric(28, 10))
+    entry_shadow_perp_cost_usd: Mapped[Decimal | None] = mapped_column(Numeric(28, 10))
+
     exit_spot_mid: Mapped[Decimal | None] = mapped_column(Numeric(28, 10))
     exit_perp_mid: Mapped[Decimal | None] = mapped_column(Numeric(28, 10))
     exit_spot_price: Mapped[Decimal | None] = mapped_column(Numeric(28, 10))
     exit_perp_price: Mapped[Decimal | None] = mapped_column(Numeric(28, 10))
+    exit_spot_fee_usd: Mapped[Decimal | None] = mapped_column(Numeric(28, 10))
+    exit_perp_fee_usd: Mapped[Decimal | None] = mapped_column(Numeric(28, 10))
+    exit_spot_slippage_usd: Mapped[Decimal | None] = mapped_column(Numeric(28, 10))
+    exit_perp_slippage_usd: Mapped[Decimal | None] = mapped_column(Numeric(28, 10))
+
+    exit_shadow_observed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    exit_shadow_spot_filled_quantity: Mapped[Decimal | None] = mapped_column(Numeric(28, 10))
+    exit_shadow_perp_filled_quantity: Mapped[Decimal | None] = mapped_column(Numeric(28, 10))
+    exit_shadow_spot_price: Mapped[Decimal | None] = mapped_column(Numeric(28, 10))
+    exit_shadow_perp_price: Mapped[Decimal | None] = mapped_column(Numeric(28, 10))
+    exit_shadow_spot_cost_usd: Mapped[Decimal | None] = mapped_column(Numeric(28, 10))
+    exit_shadow_perp_cost_usd: Mapped[Decimal | None] = mapped_column(Numeric(28, 10))
+
     funding_pnl_usd: Mapped[Decimal | None] = mapped_column(Numeric(28, 10))
     gross_pnl_usd: Mapped[Decimal | None] = mapped_column(Numeric(28, 10))
     fees_usd: Mapped[Decimal | None] = mapped_column(Numeric(28, 10))
