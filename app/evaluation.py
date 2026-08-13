@@ -10,6 +10,7 @@ ZERO = Decimal("0")
 ONE = Decimal("1")
 BPS = Decimal("10000")
 EPS = Decimal("0.000000001")
+PNL_TOLERANCE = Decimal("0.000001")
 
 
 class EvaluationError(ValueError):
@@ -192,9 +193,18 @@ def _percentile(values: Sequence[Decimal], q: Decimal) -> Decimal | None:
     return ordered[lower] + (ordered[upper] - ordered[lower]) * fraction
 
 
-def _daily_returns(nav_series: tuple[NavObservation, ...]) -> list[Decimal]:
+def _daily_equivalent_returns(nav_series: tuple[NavObservation, ...]) -> list[Decimal]:
+    """Normalize irregular NAV intervals to daily-equivalent returns before annualization."""
     ordered = sorted(nav_series, key=lambda item: _aware(item.observed_at))
-    return [(current.nav_usd / previous.nav_usd) - ONE for previous, current in zip(ordered, ordered[1:])]
+    returns: list[Decimal] = []
+    for previous, current in zip(ordered, ordered[1:]):
+        elapsed_days = (_aware(current.observed_at) - _aware(previous.observed_at)).total_seconds() / 86400
+        if elapsed_days <= 0:
+            continue
+        ratio = float(current.nav_usd / previous.nav_usd)
+        daily_return = math.pow(ratio, 1.0 / elapsed_days) - 1.0
+        returns.append(_to_decimal(daily_return))
+    return returns
 
 
 def _risk_adjusted(returns: list[Decimal]) -> tuple[Decimal | None, Decimal | None]:
@@ -245,7 +255,7 @@ def performance_metrics(evaluation: EvaluationInput, policy: EvaluationPolicy) -
     average_win = total_wins / Decimal(len(winners)) if winners else None
     average_loss = sum(losers, ZERO) / Decimal(len(losers)) if losers else None
     concentration = sum(sorted(winners, reverse=True)[:3], ZERO) / total_wins if total_wins > ZERO else None
-    sharpe, sortino = _risk_adjusted(_daily_returns(evaluation.nav_series))
+    sharpe, sortino = _risk_adjusted(_daily_equivalent_returns(evaluation.nav_series))
     return PerformanceMetrics(
         forward_days=forward_days,
         trade_count=len(trades),
@@ -270,7 +280,7 @@ def execution_metrics(evaluation: EvaluationInput) -> ExecutionMetrics:
     divergences: list[Decimal] = []
     cost_underestimates: list[Decimal] = []
     for item in evaluation.executions:
-        fill_ratios.append(min(ONE, max(ZERO, item.shadow_filled_quantity / item.intended_quantity)))
+        fill_ratios.append(item.shadow_filled_quantity / item.intended_quantity)
         if item.paper_average_price is not None and item.shadow_average_price is not None:
             divergences.append(abs(item.shadow_average_price - item.paper_average_price) / item.paper_average_price * BPS)
         cost_underestimates.append(item.shadow_cost_usd - item.paper_cost_usd)
@@ -307,7 +317,12 @@ def prediction_metrics(evaluation: EvaluationInput) -> PredictionMetrics:
         actual_rate = Decimal(sum(value[1] for value in values)) / Decimal(len(values))
         calibration += abs(average_p - actual_rate) * Decimal(len(values)) / count
     brier = sum(brier_values, ZERO) / count
-    market = (sum(market_brier, ZERO) / Decimal(len(market_brier))) if market_brier else None
+    # A market benchmark is valid only when every forecast has a same-event market probability.
+    market = (
+        sum(market_brier, ZERO) / Decimal(len(market_brier))
+        if len(market_brier) == len(brier_values)
+        else None
+    )
     return PredictionMetrics(
         forecast_count=len(brier_values),
         brier_score=brier,
@@ -335,28 +350,43 @@ class EvidenceEvaluator:
         end = _aware(evaluation.evaluated_at)
         if end < start:
             raise EvaluationError("evaluated_at cannot precede forward_started_at")
+
         timestamps = [item.observed_at for item in evaluation.nav_series]
         timestamps += [item.closed_at for item in evaluation.trades]
         timestamps += [item.observed_at for item in evaluation.executions]
         timestamps += [item.resolved_at for item in evaluation.forecasts]
         if any(_aware(value) < start or _aware(value) > end for value in timestamps):
             raise EvaluationError("all evidence observations must fall inside the declared forward window")
+
+        nav_times = [_aware(item.observed_at) for item in evaluation.nav_series]
+        if len(nav_times) != len(set(nav_times)):
+            raise EvaluationError("NAV observations cannot share a timestamp")
         if any(item.nav_usd <= ZERO for item in evaluation.nav_series):
             raise EvaluationError("NAV observations must be positive")
+
         for trade in evaluation.trades:
             if trade.fees_usd < ZERO or trade.slippage_usd < ZERO:
                 raise EvaluationError("trade costs cannot be negative")
             if trade.allocated_capital_usd <= ZERO or trade.planned_loss_usd <= ZERO:
                 raise EvaluationError("trade allocated capital and planned loss must be positive")
+            if trade.planned_loss_usd > trade.allocated_capital_usd:
+                raise EvaluationError("planned loss cannot exceed allocated capital")
+            expected_net = trade.gross_pnl_usd - trade.fees_usd - trade.slippage_usd
+            if abs(trade.net_pnl_usd - expected_net) > PNL_TOLERANCE:
+                raise EvaluationError("trade net PnL must reconcile to gross PnL minus costs")
+
         for item in evaluation.executions:
             if item.intended_quantity <= ZERO or item.paper_filled_quantity < ZERO or item.shadow_filled_quantity < ZERO:
                 raise EvaluationError("execution quantities are invalid")
+            if item.paper_filled_quantity > item.intended_quantity or item.shadow_filled_quantity > item.intended_quantity:
+                raise EvaluationError("execution fill cannot exceed intended quantity")
             if item.paper_average_price is not None and item.paper_average_price <= ZERO:
                 raise EvaluationError("paper average price must be positive")
             if item.shadow_average_price is not None and item.shadow_average_price <= ZERO:
                 raise EvaluationError("shadow average price must be positive")
             if item.paper_cost_usd < ZERO or item.shadow_cost_usd < ZERO:
                 raise EvaluationError("execution costs cannot be negative")
+
         for forecast in evaluation.forecasts:
             if forecast.probability < ZERO or forecast.probability > ONE or forecast.outcome not in (0, 1):
                 raise EvaluationError("forecast probability/outcome is invalid")
@@ -370,6 +400,7 @@ class EvidenceEvaluator:
         prediction = prediction_metrics(evaluation)
         red: list[str] = []
         amber: list[str] = []
+
         if evaluation.data_integrity_failures > 0:
             red.append("DATA_INTEGRITY_FAILURE")
         if evaluation.unresolved_critical_incidents > 0:
@@ -386,11 +417,13 @@ class EvidenceEvaluator:
             red.append("MAX_DRAWDOWN_EXCEEDED")
         if performance.forward_days < self.policy.min_forward_days:
             amber.append("INSUFFICIENT_FORWARD_DAYS")
+
         if performance.trade_count > 0:
             if performance.profit_factor is None or performance.profit_factor < self.policy.min_profit_factor:
                 amber.append("PROFIT_FACTOR_BELOW_GATE")
             if performance.top3_profit_concentration is not None and performance.top3_profit_concentration > self.policy.max_top3_profit_concentration:
                 amber.append("PROFIT_TOO_CONCENTRATED")
+
         if evaluation.family == "prediction":
             if prediction.forecast_count < self.policy.min_forecasts_prediction:
                 amber.append("INSUFFICIENT_RESOLVED_FORECASTS")
@@ -402,6 +435,7 @@ class EvidenceEvaluator:
                 amber.append("DOES_NOT_BEAT_MARKET_BRIER")
         elif performance.trade_count < self.policy.min_trade_count(evaluation.family):
             amber.append("INSUFFICIENT_TRADE_SAMPLE")
+
         if execution.observation_count == 0:
             amber.append("NO_SHADOW_EXECUTION_SAMPLE")
         else:
@@ -409,6 +443,7 @@ class EvidenceEvaluator:
                 amber.append("SHADOW_FILL_RATIO_BELOW_GATE")
             if execution.p90_absolute_price_divergence_bps is None or execution.p90_absolute_price_divergence_bps > self.policy.max_shadow_p90_price_divergence_bps:
                 amber.append("PAPER_SHADOW_PRICE_DIVERGENCE")
+
         if red:
             recommendation: Literal["RED", "AMBER", "GREEN-1_CANDIDATE"] = "RED"
             reasons = tuple(dict.fromkeys(red + amber))
@@ -418,6 +453,7 @@ class EvidenceEvaluator:
         else:
             recommendation = "GREEN-1_CANDIDATE"
             reasons = ("ALL_PRE_REGISTERED_FORWARD_GATES_PASSED",)
+
         return EvaluationResult(
             recommendation=recommendation,
             reasons=reasons,
