@@ -31,6 +31,8 @@ from app.venues.solana_models import (
 
 ZERO = Decimal("0")
 HORIZONS_MINUTES = (5, 30, 60, 360, 1440)
+LABEL_MAX_LATENESS_RATIO = Decimal("0.25")
+LABEL_MIN_LATENESS_MINUTES = Decimal("1")
 
 
 def _aware(value: datetime) -> datetime:
@@ -249,7 +251,11 @@ class SolanaForensicService:
 
 
 class ForwardLabelService:
-    """Build labels from later snapshots, anchored to the first observed entry-time DEX snapshot."""
+    """Build forward labels only when a snapshot is close enough to the requested horizon."""
+
+    @staticmethod
+    def _max_lateness_minutes(horizon: int) -> Decimal:
+        return max(LABEL_MIN_LATENESS_MINUTES, Decimal(horizon) * LABEL_MAX_LATENESS_RATIO)
 
     @staticmethod
     def resolve(db: Session, *, mint: str, horizons: tuple[int, ...] = HORIZONS_MINUTES) -> int:
@@ -278,6 +284,7 @@ class ForwardLabelService:
         entry_at = _aware(entry.captured_at)
         if entry_at < launch_at:
             return 0
+
         created = 0
         for horizon in horizons:
             if horizon <= 0:
@@ -290,14 +297,20 @@ class ForwardLabelService:
                 )
             ):
                 continue
+
             target = entry_at + timedelta(minutes=horizon)
             future = next((s for s in snapshots if _aware(s.captured_at) >= target), None)
             if future is None:
                 continue
+            future_at = _aware(future.captured_at)
+            observed_horizon = Decimal(str((future_at - entry_at).total_seconds() / 60))
+            lateness = observed_horizon - Decimal(horizon)
+            if lateness < ZERO or lateness > ForwardLabelService._max_lateness_minutes(horizon):
+                continue
+
             return_pct = None
             if entry.price_usd > ZERO:
                 return_pct = ((future.price_usd - entry.price_usd) / entry.price_usd) * Decimal("100")
-            future_at = _aware(future.captured_at)
             max_liq = max(
                 (
                     s.liquidity_usd
@@ -311,6 +324,8 @@ class ForwardLabelService:
                     mint=mint,
                     launch_signature=launch.signature,
                     horizon_minutes=horizon,
+                    entry_observed_at=entry.captured_at,
+                    observed_horizon_minutes=observed_horizon,
                     entry_price_usd=entry.price_usd,
                     future_price_usd=future.price_usd,
                     return_pct=return_pct,
