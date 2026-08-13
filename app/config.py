@@ -21,6 +21,19 @@ class Settings(BaseSettings):
     hyperliquid_funding_poll_seconds: int = 3600
     hyperliquid_funding_coins: str = 'BTC,ETH,SOL'
     hyperliquid_forward_poll_seconds: int = 300
+    hyperliquid_forward_study_external_id: str = 'hyperliquid-btc-carry-m6c-v1'
+    hyperliquid_forward_instrument: str = 'BTC'
+    hyperliquid_forward_initial_capital_usd: float = 1000.0
+    hyperliquid_forward_paired_notional_usd: float = 100.0
+    hyperliquid_forward_horizon_hours: int = 24
+    hyperliquid_forward_min_edge_bps: float = 10.0
+    hyperliquid_forward_planned_loss_pct: float = 0.02
+    hyperliquid_forward_spot_fee_bps: float = 7.0
+    hyperliquid_forward_perp_fee_bps: float = 4.5
+    hyperliquid_forward_slippage_reserve_bps_per_leg: float = 2.0
+    hyperliquid_forward_shadow_delay_ms: int = 1000
+    hyperliquid_forward_max_exit_delay_hours: int = 6
+    hyperliquid_forward_max_funding_oracle_age_minutes: int = 5
     polymarket_timeout_seconds: float = 10.0
     polymarket_scan_seconds: int = 60
     polymarket_max_markets: int = 50
@@ -68,6 +81,8 @@ class Settings(BaseSettings):
     evaluation_max_prediction_calibration_error: float = 0.10
     evaluation_max_nav_gap_days: float = 3.0
     forward_ingest_secret: str = ''
+    forward_evaluation_poll_seconds: int = 3600
+    forward_status_max_market_age_seconds: int = 900
 
 @lru_cache
 def get_settings() -> Settings:
