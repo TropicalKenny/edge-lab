@@ -204,9 +204,7 @@ services:
       SIGNER_ENABLED: "false"
       FORWARD_EVALUATION_POLL_SECONDS: ${FORWARD_EVALUATION_POLL_SECONDS:-3600}
     depends_on:
-      hyperliquid-forward-bootstrap:
-        condition: service_completed_successfully
-      polymarket-forward-bootstrap:
+      migrate:
         condition: service_completed_successfully
     restart: unless-stopped
 
