@@ -65,6 +65,8 @@ class Settings(BaseSettings):
     evaluation_min_shadow_fill_ratio: float = 0.90
     evaluation_max_shadow_p90_price_divergence_bps: float = 50.0
     evaluation_max_prediction_calibration_error: float = 0.10
+    evaluation_max_nav_gap_days: float = 3.0
+    forward_ingest_secret: str = ''
 
 @lru_cache
 def get_settings() -> Settings:

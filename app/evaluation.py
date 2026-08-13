@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Literal, Sequence
 
@@ -11,6 +11,7 @@ ONE = Decimal("1")
 BPS = Decimal("10000")
 EPS = Decimal("0.000000001")
 PNL_TOLERANCE = Decimal("0.000001")
+FUTURE_TOLERANCE = timedelta(minutes=1)
 
 
 class EvaluationError(ValueError):
@@ -87,6 +88,7 @@ class EvaluationPolicy:
     min_shadow_fill_ratio: Decimal = Decimal("0.90")
     max_shadow_p90_price_divergence_bps: Decimal = Decimal("50")
     max_prediction_calibration_error: Decimal = Decimal("0.10")
+    max_nav_gap_days: Decimal = Decimal("3")
 
     def min_trade_count(self, family: str) -> int:
         if family == "funding":
@@ -124,12 +126,15 @@ class EvaluationPolicy:
             raise EvaluationError("cost_stress_multiplier must be at least one")
         if self.max_shadow_p90_price_divergence_bps < ZERO:
             raise EvaluationError("max shadow price divergence cannot be negative")
+        if self.max_nav_gap_days <= ZERO:
+            raise EvaluationError("max_nav_gap_days must be positive")
 
 
 @dataclass(frozen=True)
 class PerformanceMetrics:
     forward_days: int
     nav_observation_count: int
+    max_nav_gap_days: Decimal | None
     trade_count: int
     gross_pnl_usd: Decimal
     net_pnl_usd: Decimal
@@ -238,6 +243,18 @@ def _max_drawdown(nav_series: tuple[NavObservation, ...]) -> Decimal | None:
     return max_drawdown
 
 
+def _max_nav_gap_days(evaluation: EvaluationInput) -> Decimal | None:
+    if not evaluation.nav_series:
+        return None
+    ordered = sorted((_aware(item.observed_at) for item in evaluation.nav_series))
+    boundaries = [_aware(evaluation.forward_started_at), *ordered, _aware(evaluation.evaluated_at)]
+    gaps = [
+        Decimal(str((current - previous).total_seconds() / 86400))
+        for previous, current in zip(boundaries, boundaries[1:])
+    ]
+    return max(gaps, default=ZERO)
+
+
 def performance_metrics(evaluation: EvaluationInput, policy: EvaluationPolicy) -> PerformanceMetrics:
     start = _aware(evaluation.forward_started_at)
     end = _aware(evaluation.evaluated_at)
@@ -261,6 +278,7 @@ def performance_metrics(evaluation: EvaluationInput, policy: EvaluationPolicy) -
     return PerformanceMetrics(
         forward_days=forward_days,
         nav_observation_count=len(evaluation.nav_series),
+        max_nav_gap_days=_max_nav_gap_days(evaluation),
         trade_count=len(trades),
         gross_pnl_usd=gross,
         net_pnl_usd=net,
@@ -348,6 +366,8 @@ class EvidenceEvaluator:
         end = _aware(evaluation.evaluated_at)
         if end < start:
             raise EvaluationError("evaluated_at cannot precede forward_started_at")
+        if end > datetime.now(timezone.utc) + FUTURE_TOLERANCE:
+            raise EvaluationError("evaluated_at cannot be in the future")
         timestamps = [item.observed_at for item in evaluation.nav_series]
         timestamps += [item.closed_at for item in evaluation.trades]
         timestamps += [item.observed_at for item in evaluation.executions]
@@ -410,6 +430,8 @@ class EvidenceEvaluator:
         else:
             if performance.nav_observation_count < self.policy.min_nav_observations:
                 amber.append("INSUFFICIENT_NAV_OBSERVATIONS")
+            if performance.max_nav_gap_days is not None and performance.max_nav_gap_days > self.policy.max_nav_gap_days:
+                amber.append("NAV_COVERAGE_GAP")
             if performance.max_drawdown_pct is not None and performance.max_drawdown_pct > self.policy.max_drawdown_pct:
                 red.append("MAX_DRAWDOWN_EXCEEDED")
         if performance.forward_days < self.policy.min_forward_days:
