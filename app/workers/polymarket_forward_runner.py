@@ -5,7 +5,7 @@ import logging
 
 from app.config import get_settings
 from app.database import get_session_factory
-from app.polymarket_forward import PolymarketStructuralForwardRunner
+from app.polymarket_forward_operational import OperationalPolymarketStructuralForwardRunner
 from app.services import HealthRegistry
 from app.venues.polymarket import PolymarketPublicClient
 
@@ -17,7 +17,7 @@ async def run() -> None:
     health = HealthRegistry()
     SessionLocal = get_session_factory()
     async with PolymarketPublicClient(timeout_seconds=settings.polymarket_timeout_seconds) as client:
-        runner = PolymarketStructuralForwardRunner(client=client, health=health)
+        runner = OperationalPolymarketStructuralForwardRunner(client=client, health=health)
         while True:
             db = SessionLocal()
             try:
