@@ -4,14 +4,14 @@ import json
 
 from app.config import get_settings
 from app.database import get_session_factory
-from app.polymarket_forward import PolymarketForwardBootstrap
+from app.polymarket_forward_operational import OperationalPolymarketForwardBootstrap
 
 
 def run() -> None:
     settings = get_settings()
     db = get_session_factory()()
     try:
-        study = PolymarketForwardBootstrap.bootstrap(db, settings=settings)
+        study = OperationalPolymarketForwardBootstrap.bootstrap(db, settings=settings)
         print(
             json.dumps(
                 {
