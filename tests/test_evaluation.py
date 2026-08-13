@@ -33,7 +33,7 @@ def nav_series(drawdown: bool = False):
     return tuple(NavObservation(START + timedelta(days=day), D(value)) for day, value in values)
 
 
-def profitable_trades(count: int = 60, *, high_cost: bool = False):
+def profitable_trades(count: int = 60):
     trades = []
     for i in range(count):
         closed_at = START + timedelta(days=1 + (i % 90), minutes=i)
@@ -43,19 +43,13 @@ def profitable_trades(count: int = 60, *, high_cost: bool = False):
         else:
             gross = D("-0.9")
             net = D("-1")
-        fee = D("0.05")
-        slippage = D("0.05")
-        if high_cost:
-            fee = D("0.50")
-            slippage = D("0.50")
-            net = gross - fee - slippage
         trades.append(
             TradeOutcome(
                 closed_at=closed_at,
                 gross_pnl_usd=gross,
                 net_pnl_usd=net,
-                fees_usd=fee,
-                slippage_usd=slippage,
+                fees_usd=D("0.05"),
+                slippage_usd=D("0.05"),
                 allocated_capital_usd=D("100"),
                 planned_loss_usd=D("2"),
             )
@@ -146,43 +140,42 @@ def test_funding_strategy_can_only_become_green1_candidate_after_all_gates():
 
 
 def test_insufficient_forward_days_is_amber():
-    evaluation = base_input()
-    evaluation = EvaluationInput(**{**evaluation.__dict__, "evaluated_at": START + timedelta(days=40)})
-    # Keep all evidence inside the shortened window.
+    end = START + timedelta(days=40)
     evaluation = EvaluationInput(
-        strategy_slug=evaluation.strategy_slug,
-        strategy_version=evaluation.strategy_version,
-        family=evaluation.family,
+        strategy_slug="strategy-a",
+        strategy_version="v1",
+        family="funding",
         forward_started_at=START,
-        evaluated_at=START + timedelta(days=40),
-        nav_series=tuple(x for x in nav_series() if x.observed_at <= START + timedelta(days=40)),
-        trades=tuple(x for x in profitable_trades(20) if x.closed_at <= START + timedelta(days=40)),
-        executions=tuple(x for x in good_executions(10) if x.observed_at <= START + timedelta(days=40)),
+        evaluated_at=end,
+        nav_series=tuple(x for x in nav_series() if x.observed_at <= end),
+        trades=tuple(x for x in profitable_trades(20) if x.closed_at <= end),
+        executions=tuple(x for x in good_executions(10) if x.observed_at <= end),
     )
     result = EvidenceEvaluator(relaxed_policy(min_trades_funding=10)).evaluate(evaluation)
     assert result.recommendation == "AMBER"
     assert "INSUFFICIENT_FORWARD_DAYS" in result.reasons
 
 
-def test_cost_stress_failure_is_red():
+def test_cost_stress_failure_is_red_even_when_observed_net_is_positive():
     trades = []
     for i in range(60):
-        gross = D("1") if i % 2 == 0 else D("-0.2")
-        costs = D("0.45")
+        gross = D("1.5") if i % 2 == 0 else D("-0.5")
+        fees = D("0.20")
+        slippage = D("0.20")
         trades.append(
             TradeOutcome(
                 closed_at=START + timedelta(days=1 + i),
                 gross_pnl_usd=gross,
-                net_pnl_usd=gross - costs,
-                fees_usd=D("0.25"),
-                slippage_usd=D("0.20"),
+                net_pnl_usd=gross - fees - slippage,
+                fees_usd=fees,
+                slippage_usd=slippage,
                 allocated_capital_usd=D("100"),
                 planned_loss_usd=D("2"),
             )
         )
     result = EvidenceEvaluator(relaxed_policy()).evaluate(base_input(trades=tuple(trades)))
-    assert result.performance.net_pnl_usd > 0
-    assert result.performance.stressed_net_pnl_usd <= 0
+    assert result.performance.net_pnl_usd == D("6.0")
+    assert result.performance.stressed_net_pnl_usd == D("-18.0")
     assert result.recommendation == "RED"
     assert "FAILS_COST_STRESS" in result.reasons
 
@@ -237,9 +230,25 @@ def test_evidence_outside_declared_forward_window_is_rejected():
         EvidenceEvaluator(relaxed_policy()).evaluate(base_input(nav=leaked_nav))
 
 
-def test_prediction_strategy_needs_calibration_and_market_baseline():
+def test_trade_pnl_must_reconcile_to_gross_minus_costs():
+    trade = profitable_trades(1)[0]
+    broken = TradeOutcome(
+        closed_at=trade.closed_at,
+        gross_pnl_usd=trade.gross_pnl_usd,
+        net_pnl_usd=D("999"),
+        fees_usd=trade.fees_usd,
+        slippage_usd=trade.slippage_usd,
+        allocated_capital_usd=trade.allocated_capital_usd,
+        planned_loss_usd=trade.planned_loss_usd,
+    )
+    with pytest.raises(EvaluationError, match="reconcile"):
+        EvidenceEvaluator(relaxed_policy(min_trades_funding=1)).evaluate(base_input(trades=(broken,)))
+
+
+def test_prediction_strategy_needs_calibration_and_complete_market_baseline():
+    forecasts = calibrated_forecasts()
     good = EvidenceEvaluator(relaxed_policy()).evaluate(
-        base_input(family="prediction", forecasts=calibrated_forecasts())
+        base_input(family="prediction", forecasts=forecasts)
     )
     assert good.prediction.forecast_count == 50
     assert good.prediction.calibration_error == D("0.0")
@@ -248,14 +257,15 @@ def test_prediction_strategy_needs_calibration_and_market_baseline():
     assert good.prediction.brier_improvement_vs_market == D("0.09")
     assert good.recommendation == "GREEN-1_CANDIDATE"
 
-    missing_baseline = tuple(
-        ForecastOutcome(x.resolved_at, x.probability, x.outcome, None) for x in calibrated_forecasts()
-    )
+    partial_baseline = list(forecasts)
+    first = partial_baseline[0]
+    partial_baseline[0] = ForecastOutcome(first.resolved_at, first.probability, first.outcome, None)
     amber = EvidenceEvaluator(relaxed_policy()).evaluate(
-        base_input(family="prediction", forecasts=missing_baseline)
+        base_input(family="prediction", forecasts=tuple(partial_baseline))
     )
     assert amber.recommendation == "AMBER"
     assert "MISSING_MARKET_BRIER_BASELINE" in amber.reasons
+    assert amber.prediction.market_brier_score is None
 
 
 def test_evaluation_api_persists_evidence_without_mutating_strategy_status():
