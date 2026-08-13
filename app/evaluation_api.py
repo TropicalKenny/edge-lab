@@ -96,6 +96,7 @@ def evaluation_policy() -> EvaluationPolicy:
         min_shadow_fill_ratio=Decimal(str(settings.evaluation_min_shadow_fill_ratio)),
         max_shadow_p90_price_divergence_bps=Decimal(str(settings.evaluation_max_shadow_p90_price_divergence_bps)),
         max_prediction_calibration_error=Decimal(str(settings.evaluation_max_prediction_calibration_error)),
+        max_nav_gap_days=Decimal(str(settings.evaluation_max_nav_gap_days)),
     )
 
 
@@ -226,4 +227,5 @@ def evaluation_status():
         "minimum_forward_days": settings.evaluation_min_forward_days,
         "minimum_nav_observations": settings.evaluation_min_nav_observations,
         "minimum_shadow_observations": settings.evaluation_min_shadow_observations,
+        "maximum_nav_gap_days": settings.evaluation_max_nav_gap_days,
     }
