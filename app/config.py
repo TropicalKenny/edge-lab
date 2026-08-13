@@ -41,6 +41,16 @@ class Settings(BaseSettings):
     polymarket_max_shares_per_opportunity: float = 100.0
     polymarket_min_edge_bps: float = 10.0
     polymarket_max_book_age_seconds: int = 10
+    polymarket_forward_poll_seconds: int = 60
+    polymarket_forward_study_external_id: str = 'polymarket-structural-m6f-v1'
+    polymarket_forward_initial_capital_usd: float = 1000.0
+    polymarket_forward_fee_buffer_pct: float = 2.0
+    polymarket_forward_shadow_delay_ms: int = 1000
+    polymarket_forward_operation_cost_usd: float = 0.25
+    polymarket_forward_planned_loss_pct: float = 0.02
+    polymarket_forward_attempt_interval_seconds: int = 300
+    polymarket_forward_max_attempts_per_cycle: int = 3
+    polymarket_forward_health_max_nav_age_seconds: int = 7200
     helius_api_key: str = ''
     helius_commitment: str = 'confirmed'
     helius_pump_program_ids: str = '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P,pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA'

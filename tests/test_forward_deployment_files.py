@@ -4,6 +4,19 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def service_block(text: str, name: str) -> str:
+    lines = text.splitlines()
+    marker = f"  {name}:"
+    assert marker in lines
+    start = lines.index(marker) + 1
+    block: list[str] = []
+    for line in lines[start:]:
+        if line.startswith("  ") and not line.startswith("    "):
+            break
+        block.append(line)
+    return "\n".join(block)
+
+
 def test_forward_compose_keeps_data_services_private_and_signer_disabled():
     text = (ROOT / "deploy" / "compose.forward.yml").read_text()
     assert 'SIGNER_ENABLED: "false"' in text
@@ -15,22 +28,22 @@ def test_forward_compose_keeps_data_services_private_and_signer_disabled():
     assert "/exchange" not in text.lower()
 
 
-def test_forward_overlay_gives_bootstrap_and_evaluator_hardened_database_url():
+def test_forward_overlay_gives_all_forward_workers_hardened_database_url():
     text = (ROOT / "deploy" / "compose.forward.yml").read_text()
     database_url = "DATABASE_URL: postgresql+psycopg://edge:${POSTGRES_PASSWORD}@postgres:5432/edge"
-    bootstrap = text.split("  hyperliquid-forward-bootstrap:\n", 1)[1].split(
-        "\n  hyperliquid-forward-runner:\n", 1
-    )[0]
-    evaluator = text.split("  forward-evaluator:\n", 1)[1].split(
-        "\n  polymarket-collector:\n", 1
-    )[0]
-    assert database_url in bootstrap
-    assert 'SIGNER_ENABLED: "false"' in bootstrap
-    assert database_url in evaluator
-    assert 'SIGNER_ENABLED: "false"' in evaluator
+    for name in (
+        "hyperliquid-forward-bootstrap",
+        "hyperliquid-forward-runner",
+        "polymarket-forward-bootstrap",
+        "polymarket-forward-runner",
+        "forward-evaluator",
+    ):
+        block = service_block(text, name)
+        assert database_url in block
+        assert 'SIGNER_ENABLED: "false"' in block
 
 
-def test_forward_launcher_refuses_example_secrets_and_non_false_signer():
+def test_forward_launcher_refuses_example_secrets_and_starts_both_forward_venues():
     text = (ROOT / "deploy" / "start-forward.sh").read_text()
     assert "Refusing to start with example secrets" in text
     assert 'SIGNER_ENABLED:-false' in text
@@ -38,7 +51,35 @@ def test_forward_launcher_refuses_example_secrets_and_non_false_signer():
     assert "export SIGNER_ENABLED=false" in text
     assert "hyperliquid-forward-bootstrap" in text
     assert "hyperliquid-forward-runner" in text
+    assert "polymarket-forward-bootstrap" in text
+    assert "polymarket-forward-runner" in text
     assert "forward-evaluator" in text
+
+
+def test_each_forward_runner_has_its_own_read_only_healthcheck():
+    text = (ROOT / "docker-compose.yml").read_text()
+    hyperliquid = service_block(text, "hyperliquid-forward-runner")
+    polymarket = service_block(text, "polymarket-forward-runner")
+    assert "python -m app.forward_ops status" in hyperliquid
+    assert "--require-ready --quiet" in hyperliquid
+    assert "python -m app.polymarket_forward_ops status" in polymarket
+    assert "--require-ready --quiet" in polymarket
+
+
+def test_venue_runners_depend_on_own_bootstrap_but_shared_evaluator_does_not():
+    text = (ROOT / "docker-compose.yml").read_text()
+    hyperliquid = service_block(text, "hyperliquid-forward-runner")
+    polymarket = service_block(text, "polymarket-forward-runner")
+    evaluator = service_block(text, "forward-evaluator")
+
+    assert "hyperliquid-forward-bootstrap:" in hyperliquid
+    assert "polymarket-forward-bootstrap:" not in hyperliquid
+    assert "polymarket-forward-bootstrap:" in polymarket
+    assert "hyperliquid-forward-bootstrap:" not in polymarket
+
+    assert "migrate:" in evaluator
+    assert "hyperliquid-forward-bootstrap:" not in evaluator
+    assert "polymarket-forward-bootstrap:" not in evaluator
 
 
 def test_real_forward_env_and_backups_are_gitignored():
