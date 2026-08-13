@@ -1,4 +1,5 @@
 from datetime import datetime
+from decimal import Decimal
 
 from sqlalchemy import DateTime, Integer, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
@@ -21,12 +22,12 @@ class StrategyEvaluationRun(Base):
     trade_count: Mapped[int] = mapped_column(Integer)
     forecast_count: Mapped[int] = mapped_column(Integer)
     execution_observation_count: Mapped[int] = mapped_column(Integer)
-    net_pnl_usd: Mapped[float] = mapped_column(Numeric(28, 10))
-    stressed_net_pnl_usd: Mapped[float] = mapped_column(Numeric(28, 10))
-    max_drawdown_pct: Mapped[float | None] = mapped_column(Numeric(18, 10))
-    profit_factor: Mapped[float | None] = mapped_column(Numeric(18, 10))
-    brier_score: Mapped[float | None] = mapped_column(Numeric(18, 10))
-    calibration_error: Mapped[float | None] = mapped_column(Numeric(18, 10))
+    net_pnl_usd: Mapped[Decimal] = mapped_column(Numeric(28, 10))
+    stressed_net_pnl_usd: Mapped[Decimal] = mapped_column(Numeric(28, 10))
+    max_drawdown_pct: Mapped[Decimal | None] = mapped_column(Numeric(18, 10))
+    profit_factor: Mapped[Decimal | None] = mapped_column(Numeric(18, 10))
+    brier_score: Mapped[Decimal | None] = mapped_column(Numeric(18, 10))
+    calibration_error: Mapped[Decimal | None] = mapped_column(Numeric(18, 10))
     policy_json: Mapped[str] = mapped_column(Text)
     metrics_json: Mapped[str] = mapped_column(Text)
     reasons_json: Mapped[str] = mapped_column(Text)
