@@ -60,6 +60,21 @@ services:
         condition: service_completed_successfully
     restart: unless-stopped
 
+  hyperliquid-forward-runner:
+    profiles: ["forward"]
+    build: .
+    command: ["python", "-m", "app.workers.hyperliquid_forward_runner"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://edge:edge@postgres:5432/edge
+      REDIS_URL: redis://redis:6379/0
+      SIGNER_ENABLED: "false"
+      HYPERLIQUID_NETWORK: mainnet
+      HYPERLIQUID_FORWARD_POLL_SECONDS: "300"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
   polymarket-collector:
     build: .
     command: ["python", "-m", "app.workers.polymarket_collector"]
