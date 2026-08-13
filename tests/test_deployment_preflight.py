@@ -6,12 +6,19 @@ ROOT = Path(__file__).resolve().parents[1]
 PREFLIGHT = ROOT / "deploy" / "preflight-forward.sh"
 VERIFY = ROOT / "deploy" / "verify-forward.sh"
 RUNBOOK = ROOT / "docs" / "MILESTONE6E_FORWARD_DEPLOYMENT.md"
+START_FORWARD = ROOT / "deploy" / "start-forward.sh"
+START_TUNNEL = ROOT / "deploy" / "start-dashboard-tunnel.sh"
 
 
 def test_deployment_shell_scripts_parse_with_posix_sh():
-    for path in (PREFLIGHT, VERIFY):
+    for path in (PREFLIGHT, VERIFY, START_FORWARD, START_TUNNEL):
         result = subprocess.run(["sh", "-n", str(path)], capture_output=True, text=True)
         assert result.returncode == 0, result.stderr
+
+
+def test_launchers_cannot_skip_preflight():
+    assert "sh deploy/preflight-forward.sh --research-only" in START_FORWARD.read_text()
+    assert "sh deploy/preflight-forward.sh" in START_TUNNEL.read_text()
 
 
 def test_preflight_fails_closed_on_secrets_signer_and_wallet_material():
@@ -60,7 +67,7 @@ def test_runtime_verify_uses_isolated_dashboard_exact_db_grants_and_all_three_st
     assert "http://127.0.0.1:8000/dashboard/api/summary" not in text
     assert "dashboard unexpectedly exposes internal path" in text
     assert "dashboard SELECT table set differs from allowlist" in text
-    assert "dashboard has "+'"+privilege+"'+" on "+'"+table' in text
+    assert 'raise SystemExit("VERIFY FAILED: dashboard has "+privilege+" on "+table)' in text
     assert "cloudflared shares Docker network with research API" in text
     for flag in (
         '"can_trade_live": False',
