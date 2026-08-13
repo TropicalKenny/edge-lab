@@ -65,6 +65,15 @@ def test_hosted_asgi_exposes_dashboard_only_with_db_backed_health():
         db.close()
 
 
+def test_hosted_dashboard_routes_are_get_only():
+    for route in app.routes:
+        path = getattr(route, "path", "")
+        if not path.startswith("/dashboard"):
+            continue
+        methods = set(getattr(route, "methods", set()) or set())
+        assert methods <= {"GET", "HEAD"}
+
+
 def test_hosted_asgi_sets_strict_browser_headers():
     response = TestClient(app).get("/dashboard")
     assert response.status_code == 200
