@@ -21,7 +21,7 @@ from app.venues.solana_models import SolanaLaunchEvent
 
 app = FastAPI(
     title="Edge Lab",
-    version="0.6.3",
+    version="0.6.4",
     description="Quant research core. Live signing and venue order submission are disabled.",
 )
 settings = get_settings()
@@ -170,11 +170,13 @@ def solana_resolve_labels(mint: str, db: Session=Depends(get_db)):
 
 
 # Compose milestone routers last so the core app remains importable in isolation.
+from app.dashboard import router as dashboard_router
 from app.evaluation_api import router as evaluation_router
 from app.forward_api import router as forward_router
 from app.forward_ops_api import router as forward_ops_router
 from app.portfolio_api import router as portfolio_router
 
+app.include_router(dashboard_router)
 app.include_router(evaluation_router)
 app.include_router(forward_router)
 app.include_router(forward_ops_router)
