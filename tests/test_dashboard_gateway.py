@@ -52,6 +52,8 @@ def test_gateway_health_uses_database_and_reports_read_only_safety():
             "can_sign": False,
             "can_move_funds": False,
             "vault_accessible": False,
+            "signer_enabled": False,
+            "live_capital_usd": 0,
         }
     finally:
         app.dependency_overrides.clear()
@@ -66,21 +68,27 @@ def test_gateway_sets_strict_browser_headers():
     assert response.headers["referrer-policy"] == "no-referrer"
     assert response.headers["cross-origin-opener-policy"] == "same-origin"
     assert response.headers["cross-origin-resource-policy"] == "same-origin"
+    assert response.headers["strict-transport-security"] == "max-age=31536000"
+    assert response.headers["x-robots-tag"] == "noindex, nofollow, noarchive"
     assert response.headers["cache-control"] == "no-store"
     csp = response.headers["content-security-policy"]
     assert "default-src 'self'" in csp
     assert "connect-src 'self'" in csp
     assert "object-src 'none'" in csp
     assert "frame-ancestors 'none'" in csp
+    assert "form-action 'none'" in csp
 
 
 def test_gateway_rejects_internal_paths():
     client = TestClient(app)
     for path in (
         "/signer/status",
+        "/risk/evaluate",
+        "/paper/simulate",
         "/venues/hyperliquid/status",
         "/venues/polymarket/status",
         "/venues/solana/status",
         "/forward/ops/studies",
+        "/portfolio/allocate",
     ):
         assert client.get(path).status_code == 404
