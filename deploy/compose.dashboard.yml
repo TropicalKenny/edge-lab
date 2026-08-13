@@ -18,6 +18,9 @@ services:
         $do$;
         ALTER ROLE edge_dashboard PASSWORD :'dashboard_password';
         ALTER ROLE edge_dashboard NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS;
+        ALTER ROLE edge_dashboard SET default_transaction_read_only = on;
+        ALTER ROLE edge_dashboard SET statement_timeout = '5s';
+        ALTER ROLE edge_dashboard SET idle_in_transaction_session_timeout = '10s';
         GRANT CONNECT ON DATABASE edge TO edge_dashboard;
         GRANT USAGE ON SCHEMA public TO edge_dashboard;
 
@@ -57,6 +60,10 @@ services:
     networks:
       - default
       - dashboard_gateway
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=3).read()"]
       interval: 30s
