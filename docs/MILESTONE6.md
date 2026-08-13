@@ -6,6 +6,8 @@ Milestone 6 turns the RED/AMBER/GREEN research rules into deterministic, auditab
 
 It does **not** enable live trading. The strongest output is `GREEN-1_CANDIDATE`, which means the recorded forward evidence satisfies the pre-registered research gates and is eligible for a separate owner/security review. It does not change `Strategy.status`, fund an execution wallet, enable a signer, bridge assets, or submit an order.
 
+An evaluation can only be persisted for a strategy/version already registered in Edge Lab, and that strategy version must be immutable. Each evaluation row stores a foreign-key link to that registered version so an arbitrary unregistered configuration cannot manufacture a GREEN candidate.
+
 ## Recommendations
 
 ### RED
@@ -25,10 +27,10 @@ The strategy is not disproven by a hard RED condition, but evidence is incomplet
 - fewer than 90 forward days;
 - insufficient family-specific trade/forecast sample;
 - no closed trades;
-- insufficient NAV history;
+- too few NAV observations to assess the path/drawdown credibly;
 - profit factor below the gate;
 - profit concentrated in the top three winners;
-- no shadow-execution evidence;
+- no or too little shadow-execution evidence;
 - low shadow fill ratio;
 - excessive paper-vs-shadow price divergence;
 - prediction calibration not ready;
@@ -44,6 +46,8 @@ This remains a **recommendation only**. A later milestone must still require exp
 ## Default pre-registered gates
 
 - minimum forward period: **90 days**;
+- minimum NAV observations: **60**;
+- minimum paper-vs-shadow execution observations: **30**;
 - funding: **60 closed trades** minimum;
 - directional: **100 closed trades** minimum;
 - memecoin: **300 closed trades** minimum;
@@ -69,6 +73,7 @@ within a very small numeric tolerance. Planned maximum loss must be positive and
 
 Reported metrics include:
 
+- NAV observation count;
 - gross and net P&L;
 - observed costs;
 - stressed net P&L;
@@ -80,7 +85,7 @@ Reported metrics include:
 - annualized Sharpe and Sortino;
 - top-three profit concentration.
 
-NAV observations may be irregularly spaced. Interval returns are converted to daily-equivalent returns before annualizing Sharpe/Sortino; a monthly observation is not falsely treated as a one-day return.
+NAV observations may be irregularly spaced. Interval returns are converted to daily-equivalent returns before annualizing Sharpe/Sortino; a monthly observation is not falsely treated as a one-day return. A small handful of NAV observations cannot qualify for GREEN even when the beginning/end values look good.
 
 ## Shadow-execution reconciliation
 
@@ -88,11 +93,12 @@ Paper profitability is insufficient by itself.
 
 The evaluator compares intended/paper execution with live shadow observations and records:
 
+- observation count;
 - mean executable shadow fill ratio;
 - p90 absolute paper-vs-shadow price divergence in basis points;
 - mean shadow cost minus paper-model cost.
 
-Filled quantity cannot exceed intended quantity. Missing shadow observations keep the strategy AMBER.
+Filled quantity cannot exceed intended quantity. Fewer than the configured shadow sample leaves the strategy AMBER.
 
 ## Prediction-market evaluation
 
@@ -106,7 +112,7 @@ For resolved forecasts the evaluator records:
 
 The market benchmark is calculated only when **every evaluated forecast** has a matching market probability. A partial benchmark is rejected rather than compared against the full model sample.
 
-Prediction strategies must still provide realised trade evidence, NAV history and shadow-execution evidence before they can become `GREEN-1_CANDIDATE`; probability calibration alone cannot authorize capital.
+Prediction strategies must still provide realised trade evidence, sufficient NAV history and sufficient shadow-execution evidence before they can become `GREEN-1_CANDIDATE`; probability calibration alone cannot authorize capital.
 
 ## Anti-leakage rules
 
@@ -128,6 +134,7 @@ Historical/backtest observations therefore cannot be quietly mixed into a claime
 
 Each evaluation run is immutable audit evidence containing:
 
+- registered immutable strategy-version ID;
 - strategy slug/version/family;
 - declared forward window;
 - recommendation;
