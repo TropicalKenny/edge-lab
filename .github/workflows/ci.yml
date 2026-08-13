@@ -25,3 +25,21 @@ jobs:
         env:
           DATABASE_URL: sqlite:////tmp/edge_lab_ci.db
         run: alembic upgrade head
+      - name: Compose configuration
+        env:
+          POSTGRES_PASSWORD: ci-postgres-password-long-enough
+          FORWARD_INGEST_SECRET: ci-forward-ingest-secret-long-enough
+          DASHBOARD_DB_PASSWORD: ci-dashboard-password-separate-long-enough
+          CLOUDFLARE_TUNNEL_TOKEN: ci-tunnel-token
+          HELIUS_API_KEY: ci-helius
+          JUPITER_API_KEY: ci-jupiter
+          SIGNER_ENABLED: 'false'
+        run: |
+          docker compose \
+            -f docker-compose.yml \
+            -f deploy/compose.forward.yml \
+            -f deploy/compose.solana-forward.yml \
+            -f deploy/compose.hosted.yml \
+            --profile forward \
+            --profile solana \
+            config >/dev/null
