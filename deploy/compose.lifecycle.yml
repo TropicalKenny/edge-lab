@@ -1,0 +1,17 @@
+services:
+  solana-lifecycle-research:
+    profiles: ["lifecycle"]
+    build: .
+    command: ["python", "-m", "app.workers.solana_lifecycle_research"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://edge:${POSTGRES_PASSWORD}@postgres:5432/edge
+      SIGNER_ENABLED: "false"
+      JUPITER_API_KEY: ${JUPITER_API_KEY:?set JUPITER_API_KEY}
+      JUPITER_TIMEOUT_SECONDS: ${JUPITER_TIMEOUT_SECONDS:-10}
+      LIFECYCLE_POLL_SECONDS: ${LIFECYCLE_POLL_SECONDS:-60}
+      LIFECYCLE_MAX_OBSERVATION_AGE_MINUTES: ${LIFECYCLE_MAX_OBSERVATION_AGE_MINUTES:-1440}
+      LIFECYCLE_MAX_FEATURE_AGE_MINUTES: ${LIFECYCLE_MAX_FEATURE_AGE_MINUTES:-15}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped

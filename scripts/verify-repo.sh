@@ -35,10 +35,12 @@ if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; 
     -f docker-compose.yml \
     -f deploy/compose.forward.yml \
     -f deploy/compose.solana-forward.yml \
+    -f deploy/compose.lifecycle.yml \
     -f deploy/compose.dashboard-tunnel.yml \
     -f deploy/compose.alerts.yml \
     --profile forward \
     --profile solana \
+    --profile lifecycle \
     --profile dashboard \
     --profile alerts \
     config >/dev/null
