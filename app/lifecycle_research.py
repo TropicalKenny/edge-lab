@@ -46,6 +46,7 @@ class LifecyclePolicy:
     abandon_loss_pct: Decimal
     reentry_retracement_pct: Decimal
     reentry_min_momentum: Decimal
+    reentry_min_volume_acceleration: Decimal
     reentry_max_sell_ratio: Decimal
     reentry_min_liquidity_ratio: Decimal
     max_quote_price_impact_pct: Decimal
@@ -63,6 +64,7 @@ CANDIDATE_POLICIES = (
         abandon_loss_pct=Decimal("0.35"),
         reentry_retracement_pct=Decimal("0.15"),
         reentry_min_momentum=ZERO,
+        reentry_min_volume_acceleration=Decimal("1.00"),
         reentry_max_sell_ratio=Decimal("0.60"),
         reentry_min_liquidity_ratio=Decimal("0.70"),
         max_quote_price_impact_pct=Decimal("0.05"),
@@ -75,6 +77,7 @@ CANDIDATE_POLICIES = (
         abandon_loss_pct=Decimal("0.40"),
         reentry_retracement_pct=Decimal("0.20"),
         reentry_min_momentum=ZERO,
+        reentry_min_volume_acceleration=Decimal("1.00"),
         reentry_max_sell_ratio=Decimal("0.55"),
         reentry_min_liquidity_ratio=Decimal("0.75"),
         max_quote_price_impact_pct=Decimal("0.05"),
@@ -87,6 +90,7 @@ CANDIDATE_POLICIES = (
         abandon_loss_pct=Decimal("0.45"),
         reentry_retracement_pct=Decimal("0.25"),
         reentry_min_momentum=ZERO,
+        reentry_min_volume_acceleration=Decimal("1.00"),
         reentry_max_sell_ratio=Decimal("0.55"),
         reentry_min_liquidity_ratio=Decimal("0.80"),
         max_quote_price_impact_pct=Decimal("0.05"),
@@ -111,6 +115,7 @@ class LifecycleSnapshot:
     liquidity_usd: Decimal | None
     baseline_entry_liquidity_usd: Decimal | None
     momentum_score: Decimal | None
+    volume_acceleration: Decimal | None
     sell_ratio_5m: Decimal | None
     security_clean: bool | None
 
@@ -222,6 +227,9 @@ class LifecycleDecisionEngine:
         if retracement is None or retracement < policy.reentry_retracement_pct:
             return LifecycleDecision("WAIT", ("PULLBACK_NOT_DEEP_ENOUGH",))
 
+        if snapshot.security_clean is not True:
+            reasons.append("SECURITY_CONFIRMATION_MISSING")
+
         liquidity_ratio = snapshot.liquidity_ratio
         if (
             liquidity_ratio is None
@@ -233,6 +241,11 @@ class LifecycleDecisionEngine:
             or snapshot.momentum_score < policy.reentry_min_momentum
         ):
             reasons.append("MOMENTUM_CONFIRMATION_FAILED")
+        if (
+            snapshot.volume_acceleration is None
+            or snapshot.volume_acceleration < policy.reentry_min_volume_acceleration
+        ):
+            reasons.append("VOLUME_CONFIRMATION_FAILED")
         if (
             snapshot.sell_ratio_5m is None
             or snapshot.sell_ratio_5m > policy.reentry_max_sell_ratio
@@ -400,6 +413,11 @@ class LifecycleResearchService:
             momentum_score=(
                 Decimal(observation.momentum_score)
                 if observation.momentum_score is not None
+                else None
+            ),
+            volume_acceleration=(
+                Decimal(observation.volume_acceleration)
+                if observation.volume_acceleration is not None
                 else None
             ),
             sell_ratio_5m=(

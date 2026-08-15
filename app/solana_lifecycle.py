@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.forward_models import ForwardExecutionRecord, ForwardStudy
+from app.lifecycle_models import LifecyclePolicyState
 from app.lifecycle_research import LifecycleResearchService
 from app.venues.solana import JupiterShadowClient, JupiterShadowQuote, USDC_MINT
 from app.venues.solana_models import SolanaForensicFeatureSnapshot
@@ -242,6 +243,25 @@ class SolanaLifecycleResearchRunner:
             and Decimal(feature.transfer_fee_rate) == ZERO
         )
 
+    @staticmethod
+    def _needs_reentry_quote(
+        db: Session,
+        study: ForwardStudy,
+        target: LifecycleTarget,
+    ) -> bool:
+        return (
+            db.scalar(
+                select(LifecyclePolicyState.id)
+                .where(
+                    LifecyclePolicyState.study_id == study.id,
+                    LifecyclePolicyState.position_key == target.position_key,
+                    LifecyclePolicyState.state == "cash",
+                )
+                .limit(1)
+            )
+            is not None
+        )
+
     async def observe_target(
         self,
         db: Session,
@@ -262,22 +282,25 @@ class SolanaLifecycleResearchRunner:
             input_amount=target.token_amount_atomic,
         )
 
-        reentry_input = int(
-            (target.baseline_entry_value_usd * USDC_ATOMIC).to_integral_value(
-                rounding=ROUND_DOWN
+        reentry = None
+        reentry_ok = False
+        if self._needs_reentry_quote(db, study, target):
+            reentry_input = int(
+                (target.baseline_entry_value_usd * USDC_ATOMIC).to_integral_value(
+                    rounding=ROUND_DOWN
+                )
             )
-        )
-        reentry = await self._quote(
-            input_mint=USDC_MINT,
-            output_mint=target.mint,
-            amount=reentry_input,
-        )
-        reentry_ok = self._quote_usable(
-            reentry,
-            input_mint=USDC_MINT,
-            output_mint=target.mint,
-            input_amount=reentry_input,
-        )
+            reentry = await self._quote(
+                input_mint=USDC_MINT,
+                output_mint=target.mint,
+                amount=reentry_input,
+            )
+            reentry_ok = self._quote_usable(
+                reentry,
+                input_mint=USDC_MINT,
+                output_mint=target.mint,
+                input_amount=reentry_input,
+            )
 
         observed_at = _aware(mark.captured_at if mark is not None else now)
         latest = self._latest_feature(

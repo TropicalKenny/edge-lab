@@ -44,6 +44,7 @@ def snapshot(**overrides) -> LifecycleSnapshot:
         "liquidity_usd": D("100000"),
         "baseline_entry_liquidity_usd": D("100000"),
         "momentum_score": D("0.2"),
+        "volume_acceleration": D("1.1"),
         "sell_ratio_5m": D("0.4"),
         "security_clean": True,
     }
@@ -156,6 +157,32 @@ def test_reentry_requires_pullback_and_structure_confirmation():
                 virtual_exit_value_usd=D("35"),
                 virtual_exit_at=sold_at,
                 sell_ratio_5m=D("0.80"),
+            ),
+            policy,
+        ).action
+        == "WAIT"
+    )
+    assert (
+        LifecycleDecisionEngine.evaluate(
+            snapshot(
+                state="cash",
+                current_value_usd=D("28"),
+                virtual_exit_value_usd=D("35"),
+                virtual_exit_at=sold_at,
+                security_clean=None,
+            ),
+            policy,
+        ).action
+        == "WAIT"
+    )
+    assert (
+        LifecycleDecisionEngine.evaluate(
+            snapshot(
+                state="cash",
+                current_value_usd=D("28"),
+                virtual_exit_value_usd=D("35"),
+                virtual_exit_at=sold_at,
+                volume_acceleration=D("0.8"),
             ),
             policy,
         ).action

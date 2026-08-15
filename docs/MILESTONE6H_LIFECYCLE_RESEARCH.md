@@ -38,8 +38,9 @@ forensic features. M6H captures:
 - baseline entry/exit context for auditability.
 
 Forensic confirmation is rejected when the latest feature snapshot is older
-than `LIFECYCLE_MAX_FEATURE_AGE_MINUTES`. A dip by itself is never enough to
-produce `REENTER`.
+than `LIFECYCLE_MAX_FEATURE_AGE_MINUTES`. Re-entry also requires an explicitly
+clean security signal plus acceptable liquidity, momentum, volume acceleration
+and sell pressure. A dip by itself is never enough to produce `REENTER`.
 
 `lifecycle_policy_states` stores each policy's virtual invested/cash/abandoned
 state. `lifecycle_policy_decisions` stores every HOLD, TAKE_PROFIT, WAIT,
@@ -79,7 +80,9 @@ LIFECYCLE_MAX_FEATURE_AGE_MINUTES=15
 ```
 
 The worker refuses to start when `SIGNER_ENABLED=true` and requires only the
-existing Jupiter data/API credential needed for quote-only observation.
+existing Jupiter data/API credential needed for quote-only observation. To
+reduce provider usage, the reverse USDC-to-token quote is requested only while
+at least one virtual policy is actually in the cash/waiting state.
 
 ## Safety boundary
 
