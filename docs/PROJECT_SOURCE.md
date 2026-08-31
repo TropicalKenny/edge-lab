@@ -16,7 +16,7 @@ Last updated: 31 August 2026, Africa/Lagos
 
 - Repository: `TropicalKenny/edge-lab`
 - Primary branch: `main`
-- Verified project-state HEAD before this handoff-document commit: `85acb85cda2d325e0252d9c323a457e2020a63c3`
+- Verified `main` HEAD before the current M6H performance work: `2b1af2e4247fbdb0fca357240c6b6f78ab732dfd`
 - Open PRs at handoff: none
 - GitHub Actions running at handoff: 0 in progress, 0 queued
 - `.github/workflows` on `main` at handoff: absent
@@ -132,17 +132,39 @@ Every M6H policy decision remains `can_execute=false`.
 
 See `docs/MILESTONE6H_LIFECYCLE_RESEARCH.md`.
 
-## Current M6H verification state
+### M6H lifecycle performance accounting
 
-Verified during implementation:
+Implemented after the initial M6H state machine:
 
-- new M6H Python files were syntax-checked;
-- lifecycle Compose YAML parsed successfully;
-- isolated lifecycle state-machine tests passed 6/6;
-- tested behavior includes virtual sell -> cash/wait -> confirmed re-entry;
-- missing quote behavior fails toward HOLD/WAIT rather than inventing an executable decision.
+- deterministic, idempotent replay for every position and policy;
+- uninterrupted-hold and policy-path values on the same observation timeline;
+- exact Jupiter quote amount/value capture for scaled re-entry accounting;
+- versioned cost assumptions with quote deterioration plus a conservative extra reserve;
+- complete-cycle records and per-observation performance snapshots;
+- net/excess return, cost drag, MFE/MAE, capture, downside, time-in-state,
+  round-trip, failed-re-entry, and missed-recovery measurements;
+- sample gates of at least 300 complete positions and 300 completed cycles before
+  a policy can enter registered walk-forward comparison;
+- a fail-closed lifecycle-only launcher that keeps `SIGNER_ENABLED=false`.
 
-Do not claim that the complete repository verification suite has passed unless `scripts/verify-repo.sh` is actually run in the appropriate local/VPS environment after syncing current `main`.
+The performance layer analyzes hypothetical outcomes only. It cannot execute,
+promote a policy, or mutate the frozen M6G entry baseline.
+
+## Current verification and runtime state
+
+Verified locally on 31 August 2026:
+
+- `scripts/verify-repo.sh` passed;
+- all 180 tests passed;
+- Python compilation passed;
+- a fresh Alembic migration reached `k1c48f75b066` successfully;
+- shell syntax for `deploy/start-lifecycle.sh` passed;
+- Docker Compose rendering was skipped because Docker is unavailable in the
+  current workspace.
+
+No active VPS deployment, running collectors, or accumulating 90-day evidence
+was verified. The repository is deploy-ready research software, not a confirmed
+running research system.
 
 ## Research integrity rules
 
@@ -210,36 +232,46 @@ Do not use Actions as a substitute for understanding the code or for repeated lo
 
 ## Current exact continuation target
 
-Next research layer: **M6H lifecycle performance engine**.
+Next owner milestone: **M6I authenticated research controls from the site**.
 
-Primary question:
+The site should support a deliberately small command allowlist:
 
-> Do repeated virtual sell/wait/re-entry policies actually outperform simple holding after consistent hypothetical slippage, quote deterioration, and other modeled costs?
+- pause and resume evidence collection;
+- freeze a study so no further observations are accepted;
+- acknowledge or resolve an operational incident without deleting its record;
+- enable or disable M6H lifecycle observation for a frozen study configuration;
+- show command status, actor identity, timestamp, reason, and outcome.
 
-Build this as evidence analysis, not execution logic.
+Required architecture and safety rules:
 
-### Recommended next implementation sequence
+1. Keep the existing dashboard database identity exact-table SELECT-only.
+2. Put mutations behind a separate owner-control service and dedicated
+   least-privilege database role.
+3. Accept only typed, allowlisted research commands with idempotency keys,
+   reasons, audit records, and fail-closed state transitions.
+4. Validate Cloudflare Access identity at the application boundary and add CSRF
+   protection; do not trust a browser header alone.
+5. Do not expose the Docker socket, shell commands, internal ingest secret,
+   venue credentials, wallet material, or a general-purpose internal API proxy.
+6. Site controls must never sign, trade, swap, bridge, withdraw, transfer funds,
+   promote a strategy, or enable live capital.
+7. Add lifecycle performance reporting after the accounting schema has soaked
+   under real paper/shadow collection.
 
-1. Add policy-level lifecycle accounting across complete virtual cycles.
-2. Compute realized/virtual lifecycle P&L consistently for:
-   - uninterrupted hold baseline;
-   - each take-profit/rebuy policy;
-   - each completed virtual re-entry cycle.
-3. Apply consistent simulated costs/slippage to all compared paths.
-4. Add capture metrics, including:
-   - return relative to hold;
-   - excess return after costs;
-   - MFE capture ratio;
-   - MAE / downside avoided or incurred;
-   - number of round trips;
-   - cost drag;
-   - time invested vs time in cash;
-   - failed re-entry / missed-recovery cases;
-   - tail-loss behavior.
-5. Rank policies only after sufficient observations; do not promote from tiny samples.
-6. Use walk-forward/out-of-sample evaluation where policy thresholds are being compared or selected.
-7. Keep policy thresholds as hypotheses until evidence justifies a new registered challenger/baseline.
-8. Add read-only dashboard reporting later, after the accounting/evaluation layer is stable.
+The control plane is an owner-experience requirement, but it is not a prerequisite
+for starting paper/shadow evidence collection from the VPS.
+
+### Readiness estimate
+
+- **Start collecting paper/shadow evidence:** close. With the VPS, PostgreSQL,
+  Cloudflare, and required public-data API credentials configured, launch can be
+  attempted the same day, followed by a 24-hour soak before trusting unattended
+  collection.
+- **Use Edge Lab as an owner-operated research product:** one meaningful milestone
+  away: M6I site controls plus deployment/runtime verification.
+- **Use real money:** not close and not authorized. That requires the forward
+  evidence period (target roughly 90 days), a separate micro-live security design,
+  and explicit owner approval.
 
 ### Important design distinction
 
@@ -261,9 +293,13 @@ Do not merge these into one opaque model.
 - `app/lifecycle_research.py`
 - `app/solana_lifecycle.py`
 - `app/workers/solana_lifecycle_research.py`
+- `app/lifecycle_performance.py`
 - `alembic/versions/j0b37e64a955_add_lifecycle_research.py`
+- `alembic/versions/k1c48f75b066_add_lifecycle_performance.py`
 - `deploy/compose.lifecycle.yml`
+- `deploy/start-lifecycle.sh`
 - `tests/test_lifecycle_research.py`
+- `tests/test_lifecycle_performance.py`
 - `app/solana_forward.py` — frozen baseline reference; avoid accidental mutation
 - `scripts/verify-repo.sh`
 
@@ -274,7 +310,7 @@ Do not merge these into one opaque model.
 3. Check open PRs and current workflow/Actions state.
 4. Inspect any commits made after this handoff before editing.
 5. Read `docs/MILESTONE6H_LIFECYCLE_RESEARCH.md` and the relevant lifecycle code/tests.
-6. Continue with the M6H lifecycle performance engine unless the owner gives a different priority.
+6. Continue with the M6I authenticated owner research controls unless the owner gives a different priority.
 7. Preserve research-only safety boundaries.
 8. Do not use GitHub Actions unnecessarily; only consider it at the final push/finalization stage when it adds value.
 
