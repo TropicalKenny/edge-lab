@@ -97,5 +97,4 @@ M6H:
 - cannot promote itself to live trading;
 - writes only to the dedicated M6H research journal and virtual policy-state tables.
 
-GitHub Actions remains intentionally disabled. Repository validation continues
-through the local `scripts/verify-repo.sh` gate.
+Repository validation should normally use the local `scripts/verify-repo.sh` gate and targeted local checks. GitHub Actions is allowed only when a meaningful change is genuinely at the final push/finalization stage and the workflow adds useful verification or deployment value. Do not use Actions for routine iterations or unnecessary checks; see `docs/PROJECT_SOURCE.md` for the current owner policy.
