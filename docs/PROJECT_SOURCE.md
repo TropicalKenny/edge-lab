@@ -16,7 +16,7 @@ Last updated: 31 August 2026, Africa/Lagos
 
 - Repository: `TropicalKenny/edge-lab`
 - Primary branch: `main`
-- Verified `main` HEAD before the current M6H performance work: `2b1af2e4247fbdb0fca357240c6b6f78ab732dfd`
+- Verified `main` HEAD after M6H performance merge and before this handoff update: `d61f523dae662b1417d97fc935a1ee20953f1e0e`
 - Open PRs at handoff: none
 - GitHub Actions running at handoff: 0 in progress, 0 queued
 - `.github/workflows` on `main` at handoff: absent
@@ -133,6 +133,10 @@ Every M6H policy decision remains `can_execute=false`.
 See `docs/MILESTONE6H_LIFECYCLE_RESEARCH.md`.
 
 ### M6H lifecycle performance accounting
+
+Merged via PR #38.
+
+Merge commit: `d61f523dae662b1417d97fc935a1ee20953f1e0e`
 
 Implemented after the initial M6H state machine:
 
