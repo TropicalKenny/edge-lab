@@ -118,6 +118,17 @@ sh deploy/start-dashboard-tunnel.sh
 
 Dashboard Internet access can be stopped independently from research collection.
 
+Start the optional M6H lifecycle observer and performance-accounting worker after
+the frozen Solana M6G study is running:
+
+```sh
+sh deploy/start-lifecycle.sh
+```
+
+The launcher reuses the mandatory research preflight, forces signing off and
+starts only quote-only lifecycle observation/accounting. It does not change the
+M6G baseline or add an execution path.
+
 ## Optional owner alerts
 
 If you want Telegram alerts, create a Telegram bot through BotFather, contact/start the bot from the owner Telegram account, and determine the owner's chat ID. Put only these notification credentials in `deploy/.env.forward`:
