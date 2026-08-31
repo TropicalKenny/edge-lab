@@ -66,6 +66,23 @@ def test_each_forward_runner_has_its_own_read_only_healthcheck():
     assert "--require-ready --quiet" in polymarket
 
 
+def test_lifecycle_launcher_reuses_preflight_and_forces_research_only_mode():
+    text = (ROOT / "deploy" / "start-lifecycle.sh").read_text()
+    env_text = (ROOT / "deploy" / ".env.forward.example").read_text()
+    assert "sh deploy/preflight-forward.sh --research-only" in text
+    assert 'SIGNER_ENABLED:-false' in text
+    assert "SIGNER_ENABLED != false" in text
+    assert "export SIGNER_ENABLED=false" in text
+    assert "compose.lifecycle.yml" in text
+    assert "solana-lifecycle-research" in text
+    assert "JUPITER_API_KEY is required for quote-only lifecycle research" in text
+    assert "PRIVATE_KEY" not in text
+    assert "execute" not in text.lower()
+    assert "LIFECYCLE_POLL_SECONDS=60" in env_text
+    assert "LIFECYCLE_MAX_OBSERVATION_AGE_MINUTES=1440" in env_text
+    assert "LIFECYCLE_MAX_FEATURE_AGE_MINUTES=15" in env_text
+
+
 def test_venue_runners_depend_on_own_bootstrap_but_shared_evaluator_does_not():
     text = (ROOT / "docker-compose.yml").read_text()
     hyperliquid = service_block(text, "hyperliquid-forward-runner")
