@@ -60,16 +60,58 @@ This explicitly separates:
 The first outcome layer measures subsequent market movement, MFE and MAE. It
 does not claim that hindsight discovered a perfect top or bottom.
 
+## Lifecycle performance accounting
+
+`m6h-performance-v1` adds deterministic policy-level accounting without
+changing M6G or making any decision executable.
+
+For every policy observation it records:
+
+- virtual policy value beside the uninterrupted-hold liquidation value;
+- net and excess return after costs;
+- observed quote deterioration plus a frozen conservative reserve of 20 bps
+  and $0.01 per virtual transaction leg;
+- cumulative cost drag;
+- MFE, MAE and MFE capture ratio;
+- downside avoided or incurred relative to hold;
+- time invested versus time in cash;
+- completed invested cycles and round trips;
+- failed re-entry cycles; and
+- missed recovery cases while a policy remains in cash.
+
+Executable Jupiter quote outputs already include the quoted market impact, so
+that impact is not subtracted twice. The additional reserve covers deterioration
+between observation and hypothetical fill. The common frozen M6G entry cost is
+excluded from the M6H comparison because every lifecycle policy starts from the
+same already-entered baseline position.
+
+New observations retain exact quote amounts and USD values used by the replay.
+Older rows without that detail can be replayed only through an explicitly marked
+normalized-value fallback and remain incomplete for selection purposes.
+
+Accounting rows live in:
+
+- `lifecycle_performance_snapshots`; and
+- `lifecycle_policy_cycles`.
+
+The lifecycle worker backfills missing accounting rows deterministically before
+adding the newest observation. The journal is versioned and idempotent.
+
+Policy summaries remain non-promotional. Fewer than 300 complete positions or
+300 completed cycles is automatically `INSUFFICIENT_SAMPLE`. Reaching those
+counts only makes a policy ready for a separately registered walk-forward study;
+it does not rank, promote or authorize the policy automatically.
+
 ## Runtime
 
 M6H has its own optional Docker profile:
 
 ```sh
-docker compose \
-  -f docker-compose.yml \
-  -f deploy/compose.lifecycle.yml \
-  --profile lifecycle up -d solana-lifecycle-research
+sh deploy/start-lifecycle.sh
 ```
+
+The launcher runs the private-research preflight before rendering and starting
+the lifecycle profile.
 
 Defaults:
 
@@ -95,6 +137,7 @@ M6H:
 - cannot move funds;
 - cannot mutate M6G;
 - cannot promote itself to live trading;
-- writes only to the dedicated M6H research journal and virtual policy-state tables.
+- writes only to the dedicated M6H research, virtual policy-state and
+  performance-accounting tables.
 
 Repository validation should normally use the local `scripts/verify-repo.sh` gate and targeted local checks. GitHub Actions is allowed only when a meaningful change is genuinely at the final push/finalization stage and the workflow adds useful verification or deployment value. Do not use Actions for routine iterations or unnecessary checks; see `docs/PROJECT_SOURCE.md` for the current owner policy.

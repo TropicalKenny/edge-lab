@@ -97,6 +97,12 @@ Start private research:
 sh deploy/start-forward.sh
 ```
 
+Start optional M6H hold/exit/re-entry observation and performance accounting:
+
+```sh
+sh deploy/start-lifecycle.sh
+```
+
 Start the authenticated Dashboard V1 tunnel:
 
 ```sh

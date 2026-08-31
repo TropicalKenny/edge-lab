@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.forward_models import ForwardExecutionRecord, ForwardStudy
+from app.lifecycle_performance import LifecyclePerformanceService
 from app.lifecycle_models import LifecyclePolicyState
 from app.lifecycle_research import LifecycleResearchService
 from app.venues.solana import JupiterShadowClient, JupiterShadowQuote, USDC_MINT
@@ -332,12 +333,44 @@ class SolanaLifecycleResearchRunner:
                 if mark_ok and mark is not None and mark.price_impact_pct is not None
                 else None
             ),
+            mark_input_amount_atomic=(mark.in_amount if mark_ok and mark is not None else None),
+            mark_output_amount_atomic=(mark.out_amount if mark_ok and mark is not None else None),
+            mark_input_value_usd=(
+                Decimal(mark.in_usd_value)
+                if mark_ok and mark is not None and mark.in_usd_value is not None
+                else None
+            ),
+            mark_output_value_usd=(
+                Decimal(mark.out_usd_value)
+                if mark_ok and mark is not None and mark.out_usd_value is not None
+                else None
+            ),
             reentry_quote_available=reentry_ok,
             reentry_price_impact_pct=(
                 Decimal(reentry.price_impact_pct)
                 if reentry_ok
                 and reentry is not None
                 and reentry.price_impact_pct is not None
+                else None
+            ),
+            reentry_input_amount_atomic=(
+                reentry.in_amount if reentry_ok and reentry is not None else None
+            ),
+            reentry_output_amount_atomic=(
+                reentry.out_amount if reentry_ok and reentry is not None else None
+            ),
+            reentry_input_value_usd=(
+                Decimal(reentry.in_usd_value)
+                if reentry_ok
+                and reentry is not None
+                and reentry.in_usd_value is not None
+                else None
+            ),
+            reentry_output_value_usd=(
+                Decimal(reentry.out_usd_value)
+                if reentry_ok
+                and reentry is not None
+                and reentry.out_usd_value is not None
                 else None
             ),
             liquidity_usd=(
@@ -378,6 +411,7 @@ class SolanaLifecycleResearchRunner:
             },
         )
         decisions = LifecycleResearchService.evaluate_observation(db, observation)
+        LifecyclePerformanceService.account_observation(db, observation)
         LifecycleResearchService.resolve_outcomes(db, now=observed_at)
         return len(decisions)
 
