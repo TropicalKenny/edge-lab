@@ -24,7 +24,8 @@ for script in \
   deploy/preflight-controls.sh \
   deploy/start-control-plane.sh \
   deploy/start-dashboard-local.sh \
-  deploy/start-vps-without-solana-keys.sh; do
+  deploy/start-vps-without-solana-keys.sh \
+  deploy/start-forward.sh; do
   sh -n "$script"
 done
 
@@ -35,7 +36,7 @@ if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; 
   printf '%s\n' '==> full Docker Compose render'
   POSTGRES_PASSWORD=verify-postgres-password-long-enough \
   FORWARD_INGEST_SECRET=verify-forward-ingest-secret-long-enough \
-  CONTROL_DB_PASSWORD=verify_control_password_long_enough \
+  CONTROL_DB_PASSWORD=verify_control_password_long-enough \
   OWNER_CONTROL_API_TOKEN=verify_owner_control_token_long_enough_123456 \
   DASHBOARD_DB_PASSWORD=verify_dashboard_password_long_enough \
   CLOUDFLARE_TUNNEL_TOKEN=verify-tunnel-token \
@@ -50,12 +51,14 @@ if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; 
     -f deploy/compose.forward.yml \
     -f deploy/compose.solana-forward.yml \
     -f deploy/compose.lifecycle.yml \
+    -f deploy/compose.m6j.yml \
     -f deploy/compose.dashboard-tunnel.yml \
     -f deploy/compose.alerts.yml \
     -f deploy/compose.controls.yml \
     --profile forward \
     --profile solana \
     --profile lifecycle \
+    --profile research-acceleration \
     --profile dashboard \
     --profile alerts \
     --profile controls \
