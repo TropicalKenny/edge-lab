@@ -277,7 +277,7 @@ def render_research_snapshot_text(snapshot: dict[str, Any]) -> str:
         activity = row.get("activity") or {}
         if activity.get("tracking"):
             lines.append(
-                "Baseline activity 24h: "
+                "Activity 24h: "
                 f"scans {activity.get('cycles', 0)} | "
                 f"examined {activity.get('examined', 0)} | "
                 f"passed {activity.get('accepted', 0)} | "
@@ -287,14 +287,14 @@ def render_research_snapshot_text(snapshot: dict[str, Any]) -> str:
             venue = str(row.get("venue") or "").lower()
             if venue == "solana" and meta:
                 lines.append(
-                    "Baseline scan detail: "
+                    "Scan detail: "
                     f"launch-window observations {meta.get('launches_in_window', 0)} | "
                     f"decision features {meta.get('features_ready', 0)} | "
                     f"quote attempts {meta.get('quote_attempts', 0)}"
                 )
             elif venue == "polymarket" and meta:
                 lines.append(
-                    "Baseline scan detail: "
+                    "Scan detail: "
                     f"markets discovered {meta.get('markets_discovered', 0)} | "
                     f"validated {meta.get('markets_validated', 0)} | "
                     f"structural candidates {meta.get('structural_candidates', 0)}"
@@ -302,12 +302,12 @@ def render_research_snapshot_text(snapshot: dict[str, Any]) -> str:
             top = activity.get("top_rejection_reasons") or []
             if top:
                 lines.append(
-                    "Baseline top rejects: " + "; ".join(
+                    "Top rejects: " + "; ".join(
                         f"{item.get('reason')} {item.get('count')}" for item in top[:5]
                     )
                 )
         else:
-            lines.append("Baseline activity: tracking enabled; waiting for first completed scan")
+            lines.append("Activity: tracking enabled; waiting for first completed scan")
 
         m6j = row.get("research_acceleration") or {}
         if m6j.get("tracking"):
