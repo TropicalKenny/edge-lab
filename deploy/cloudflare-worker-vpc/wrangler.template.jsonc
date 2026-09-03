@@ -1,0 +1,14 @@
+{
+  "$schema": "https://raw.githubusercontent.com/cloudflare/workers-sdk/main/packages/wrangler/config-schema.json",
+  "name": "edge-lab-dashboard",
+  "main": "index.js",
+  "compatibility_date": "2026-09-03",
+  "workers_dev": true,
+  "preview_urls": false,
+  "vpc_services": [
+    {
+      "binding": "EDGE_DASHBOARD",
+      "service_id": "__EDGE_DASHBOARD_VPC_SERVICE_ID__"
+    }
+  ]
+}
