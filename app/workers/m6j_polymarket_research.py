@@ -1,0 +1,276 @@
+from __future__ import annotations
+
+import asyncio
+import hashlib
+import json
+import logging
+import time
+from collections import Counter
+from datetime import datetime, timezone
+from decimal import Decimal
+
+import websockets
+from sqlalchemy import select
+
+from app.config import get_settings
+from app.database import get_session_factory
+from app.forward_models import ForwardStudy
+from app.polymarket_research import PolymarketResearchService
+from app.research_acceleration import polymarket_book_from_ws
+from app.scan_telemetry import record_scan_observation
+from app.services import HealthRegistry
+from app.venues.polymarket import MARKET_WS_URL, PolymarketPublicClient, StructuralArbitrageAnalyzer
+
+log = logging.getLogger("edge_lab.m6j_polymarket")
+ZERO = Decimal("0")
+
+
+async def _study_id() -> str | None:
+    SessionLocal = get_session_factory()
+    db = SessionLocal()
+    try:
+        study = db.scalar(
+            select(ForwardStudy)
+            .where(
+                ForwardStudy.status == "active",
+                ForwardStudy.venue == "polymarket",
+            )
+            .order_by(ForwardStudy.started_at.asc())
+            .limit(1)
+        )
+        return study.id if study is not None else None
+    finally:
+        db.close()
+
+
+async def _universe(client: PolymarketPublicClient, analyzer: StructuralArbitrageAnalyzer):
+    settings = get_settings()
+    service = PolymarketResearchService(client=client, health=HealthRegistry(), analyzer=analyzer)
+    discovered = await service.discover_markets(max_markets=settings.m6j_polymarket_max_markets)
+    validated, rejected = await service._validate_markets(discovered)
+    token_ids = [
+        token
+        for market in validated
+        for token in (market.yes_token_id, market.no_token_id)
+        if token
+    ]
+    books, book_rejections = await service.fetch_books(token_ids)
+    service._remove_book_metadata_mismatches(validated, books, rejected)
+    for key, value in book_rejections.items():
+        rejected[key] = rejected.get(key, 0) + value
+    market_by_token = {}
+    for market in validated:
+        if market.yes_token_id:
+            market_by_token[market.yes_token_id] = market
+        if market.no_token_id:
+            market_by_token[market.no_token_id] = market
+    subscribed = [token for token in token_ids if token in books and token in market_by_token]
+    return validated, books, market_by_token, subscribed, rejected
+
+
+def _candidate_key(market, books) -> str:
+    yes = books.get(market.yes_token_id or "")
+    no = books.get(market.no_token_id or "")
+    raw = "|".join(
+        [
+            market.condition_id,
+            str(yes.book_hash if yes else ""),
+            str(no.book_hash if no else ""),
+            str(yes.timestamp.isoformat() if yes else ""),
+            str(no.timestamp.isoformat() if no else ""),
+        ]
+    )
+    return hashlib.sha256(raw.encode()).hexdigest()[:24]
+
+
+def _record_summary(
+    study_id: str,
+    *,
+    started_at: datetime,
+    checks: int,
+    positive_edges: int,
+    baseline_edges: int,
+    book_events: int,
+    messages: int,
+    rejection_counts: Counter[str],
+    markets: int,
+    subscribed_assets: int,
+) -> None:
+    settings = get_settings()
+    SessionLocal = get_session_factory()
+    db = SessionLocal()
+    try:
+        bucket = int(started_at.timestamp() // settings.m6j_polymarket_summary_seconds)
+        record_scan_observation(
+            db,
+            study_id=study_id,
+            external_key=f"m6j:polymarket:cycle:{bucket}",
+            observation_kind="cycle",
+            observed_at=started_at,
+            examined_count=checks,
+            accepted_count=positive_edges,
+            rejected_count=max(0, checks - positive_edges),
+            rejection_reasons=dict(rejection_counts),
+            metadata={
+                "research_lane": "m6j",
+                "research_mode": "public_websocket_observation_only",
+                "m6j_ws_messages": messages,
+                "m6j_book_events": book_events,
+                "m6j_pair_checks": checks,
+                "m6j_positive_edge_events": positive_edges,
+                "m6j_baseline_10bps_edge_events": baseline_edges,
+                "m6j_markets_subscribed": markets,
+                "m6j_assets_subscribed": subscribed_assets,
+            },
+        )
+    finally:
+        db.close()
+
+
+async def _stream_once(client: PolymarketPublicClient, study_id: str) -> None:
+    settings = get_settings()
+    analyzer = StructuralArbitrageAnalyzer(
+        min_edge_bps=Decimal(str(settings.m6j_polymarket_min_edge_bps)),
+        max_shares=Decimal(str(settings.polymarket_max_shares_per_opportunity)),
+        max_book_age_seconds=settings.m6j_polymarket_max_book_age_seconds,
+        fee_buffer_pct=Decimal(str(settings.polymarket_forward_fee_buffer_pct)),
+    )
+    markets, books, market_by_token, token_ids, discovery_rejections = await _universe(client, analyzer)
+    if not token_ids:
+        raise RuntimeError("M6J Polymarket discovery produced no websocket assets")
+
+    messages = book_events = checks = positive_edges = baseline_edges = 0
+    rejection_counts: Counter[str] = Counter(discovery_rejections)
+    summary_started = datetime.now(timezone.utc)
+    connected_at = time.monotonic()
+
+    async with websockets.connect(MARKET_WS_URL, ping_interval=None, close_timeout=5) as ws:
+        await ws.send(json.dumps({"assets_ids": token_ids, "type": "market"}, separators=(",", ":")))
+        while True:
+            if time.monotonic() - connected_at >= settings.m6j_polymarket_refresh_seconds:
+                break
+            try:
+                raw = await asyncio.wait_for(ws.recv(), timeout=10)
+            except TimeoutError:
+                await ws.send("PING")
+                continue
+            if raw == "PONG":
+                continue
+            try:
+                payload = json.loads(raw)
+            except (json.JSONDecodeError, TypeError):
+                continue
+            rows = payload if isinstance(payload, list) else [payload]
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                messages += 1
+                if row.get("event_type") != "book":
+                    continue
+                asset_id = str(row.get("asset_id") or "")
+                seed = books.get(asset_id)
+                market = market_by_token.get(asset_id)
+                if seed is None or market is None:
+                    continue
+                try:
+                    books[asset_id] = polymarket_book_from_ws(seed, row)
+                except ValueError:
+                    rejection_counts["INVALID_WS_BOOK"] += 1
+                    continue
+                book_events += 1
+                yes = books.get(market.yes_token_id or "")
+                no = books.get(market.no_token_id or "")
+                if yes is None or no is None:
+                    continue
+                checks += 1
+                opportunity, reasons = analyzer.binary_complete_set(
+                    market,
+                    books,
+                    now=max(yes.timestamp, no.timestamp),
+                )
+                if opportunity is None:
+                    for reason in reasons or ("NO_EXECUTABLE_EDGE",):
+                        rejection_counts[str(reason)] += 1
+                    continue
+                positive_edges += 1
+                if opportunity.roi_bps >= Decimal(str(settings.polymarket_min_edge_bps)):
+                    baseline_edges += 1
+                SessionLocal = get_session_factory()
+                db = SessionLocal()
+                try:
+                    record_scan_observation(
+                        db,
+                        study_id=study_id,
+                        external_key=f"m6j:polymarket:edge:{_candidate_key(market, books)}",
+                        observation_kind="candidate",
+                        observed_at=opportunity.captured_at,
+                        metadata={
+                            "research_lane": "m6j",
+                            "research_mode": "public_websocket_observation_only",
+                            "condition_id": market.condition_id,
+                            "market_id": market.market_id,
+                            "roi_bps": str(opportunity.roi_bps),
+                            "net_profit_usd": str(opportunity.net_profit),
+                            "quantity": str(opportunity.quantity),
+                            "total_cost_usd": str(opportunity.total_cost),
+                            "baseline_edge_qualified": opportunity.roi_bps
+                            >= Decimal(str(settings.polymarket_min_edge_bps)),
+                        },
+                    )
+                finally:
+                    db.close()
+
+            now = datetime.now(timezone.utc)
+            if (now - summary_started).total_seconds() >= settings.m6j_polymarket_summary_seconds:
+                _record_summary(
+                    study_id,
+                    started_at=summary_started,
+                    checks=checks,
+                    positive_edges=positive_edges,
+                    baseline_edges=baseline_edges,
+                    book_events=book_events,
+                    messages=messages,
+                    rejection_counts=rejection_counts,
+                    markets=len(markets),
+                    subscribed_assets=len(token_ids),
+                )
+                messages = book_events = checks = positive_edges = baseline_edges = 0
+                rejection_counts = Counter()
+                summary_started = now
+
+    if messages or book_events or checks:
+        _record_summary(
+            study_id,
+            started_at=summary_started,
+            checks=checks,
+            positive_edges=positive_edges,
+            baseline_edges=baseline_edges,
+            book_events=book_events,
+            messages=messages,
+            rejection_counts=rejection_counts,
+            markets=len(markets),
+            subscribed_assets=len(token_ids),
+        )
+
+
+async def run() -> None:
+    settings = get_settings()
+    if not settings.m6j_enabled:
+        log.info("M6J is disabled")
+        return
+    async with PolymarketPublicClient(timeout_seconds=settings.polymarket_timeout_seconds) as client:
+        while True:
+            study_id = await _study_id()
+            if study_id is None:
+                await asyncio.sleep(10)
+                continue
+            try:
+                await _stream_once(client, study_id)
+            except Exception:
+                log.exception("M6J Polymarket websocket session failed")
+                await asyncio.sleep(5)
+
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    asyncio.run(run())
