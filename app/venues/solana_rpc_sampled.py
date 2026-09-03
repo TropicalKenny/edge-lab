@@ -90,7 +90,9 @@ class SolanaRpcSampledPumpStream:
     def _select_transactions(self, rows: list[tuple[str, int]]) -> list[tuple[str, int]]:
         unique: dict[str, int] = {}
         for signature, slot in rows:
-            unique.setdefault(signature, slot)
+            previous_slot = unique.get(signature)
+            if previous_slot is None or slot < previous_slot:
+                unique[signature] = slot
         ranked = sorted(unique.items(), key=lambda item: self._signature_rank(item[0]))
         return ranked[: self.max_transactions_per_poll]
 
