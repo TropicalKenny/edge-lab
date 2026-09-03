@@ -24,8 +24,8 @@ from app.venues.hyperliquid import (
     l2_book_to_paper_order,
     parse_funding_history,
     parse_perp_contexts,
-    parse_spot_contexts,
 )
+from app.venues.hyperliquid_spot import parse_spot_contexts
 
 
 class HyperliquidSnapshotRepository:
