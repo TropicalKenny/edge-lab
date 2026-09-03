@@ -12,81 +12,123 @@ ROOT = Path(__file__).resolve().parents[1]
 META = {
     "tokens": [
         {"name": "USDC", "index": 0},
-        {"name": "UBTC", "index": 150},
+        {"name": "UBTC", "index": 197},
         {"name": "ETH", "index": 151},
-        {"name": "HYPE", "index": 152},
+        {"name": "HYPE", "index": 150},
     ],
     "universe": [
-        {"name": "@107", "tokens": [150, 0], "index": 107},
+        {"name": "@142", "tokens": [197, 0], "index": 142},
         {"name": "@108", "tokens": [151, 0], "index": 108},
-        {"name": "HYPE/USDC", "tokens": [152, 0], "index": 71},
+        {"name": "@107", "tokens": [150, 0], "index": 107},
     ],
 }
 
 
-def test_current_spot_context_identity_allows_sparse_and_reordered_contexts():
+def test_identified_contexts_follow_current_universe_and_ignore_extra_rows():
     payload = [
         META,
         [
+            {"coin": "@197", "midPx": None, "markPx": "1", "dayNtlVlm": "0"},
             {"coin": "@108", "midPx": "4500", "markPx": "4501", "dayNtlVlm": "4000000"},
-            {"coin": "@107", "midPx": "120000", "markPx": "120010", "dayNtlVlm": "8000000"},
+            {"coin": "@71", "midPx": None, "markPx": "1", "dayNtlVlm": "0"},
+            {"coin": "@142", "midPx": "77558.5", "markPx": "77558", "dayNtlVlm": "30556047"},
+            {"coin": "@107", "midPx": "81.7165", "markPx": "81.724", "dayNtlVlm": "78043463"},
         ],
     ]
     spots = parse_spot_contexts(payload, captured_at=NOW)
     assert [(spot.book_coin, spot.pair) for spot in spots] == [
+        ("@142", "UBTC/USDC"),
         ("@108", "ETH/USDC"),
-        ("@107", "UBTC/USDC"),
+        ("@107", "HYPE/USDC"),
     ]
 
 
-def test_current_spot_context_identity_accepts_unique_human_pair_alias():
+def test_ubtc_uses_current_market_context_not_extra_token_index_context():
+    meta = {
+        "tokens": [{"name": "USDC", "index": 0}, {"name": "UBTC", "index": 197}],
+        "universe": [{"name": "@142", "tokens": [197, 0], "index": 142}],
+    }
     payload = [
-        META,
-        [{"coin": "UBTC/USDC", "midPx": "120000", "markPx": "120010", "dayNtlVlm": "8000000"}],
+        meta,
+        [
+            {"coin": "@197", "midPx": None, "markPx": "1", "dayNtlVlm": "0"},
+            {"coin": "@142", "midPx": "77558.5", "markPx": "77558", "dayNtlVlm": "30556047"},
+        ],
     ]
     spots = parse_spot_contexts(payload, captured_at=NOW)
     assert len(spots) == 1
-    assert spots[0].book_coin == "@107"
+    assert spots[0].book_coin == "@142"
     assert spots[0].pair == "UBTC/USDC"
+    assert str(spots[0].mid_px) == "77558.5"
+    assert str(spots[0].day_ntl_volume) == "30556047"
 
 
-def test_current_spot_context_identity_accepts_documented_at_index_wire_name():
-    payload = [
-        META,
-        [{"coin": "@71", "midPx": "52", "markPx": "52.1", "dayNtlVlm": "9000000"}],
-    ]
-    spots = parse_spot_contexts(payload, captured_at=NOW)
-    assert len(spots) == 1
-    assert spots[0].book_coin == "HYPE/USDC"
-    assert spots[0].pair == "HYPE/USDC"
+def test_identified_contexts_fail_closed_when_current_market_is_missing_or_duplicated():
+    with pytest.raises(HyperliquidInfoError, match="missing spot context for current market: @108"):
+        parse_spot_contexts(
+            [
+                META,
+                [
+                    {"coin": "@142", "midPx": "77558.5"},
+                    {"coin": "@107", "midPx": "81.7"},
+                    {"coin": "@71", "midPx": "1"},
+                ],
+            ],
+            captured_at=NOW,
+        )
+
+    one_market = {
+        "tokens": META["tokens"],
+        "universe": [META["universe"][0]],
+    }
+    with pytest.raises(HyperliquidInfoError, match="duplicate spot context for current market: @142"):
+        parse_spot_contexts(
+            [
+                one_market,
+                [
+                    {"coin": "@142", "midPx": "77558.5"},
+                    {"coin": "@142", "midPx": "77559"},
+                ],
+            ],
+            captured_at=NOW,
+        )
+
+
+def test_identified_contexts_fail_closed_on_mixed_identity_shape():
+    one_market = {
+        "tokens": META["tokens"],
+        "universe": [META["universe"][0]],
+    }
+    with pytest.raises(HyperliquidInfoError, match="mixed identified/unidentified"):
+        parse_spot_contexts(
+            [one_market, [{"coin": "@142", "midPx": "77558.5"}, {"midPx": "1"}]],
+            captured_at=NOW,
+        )
 
 
 def test_legacy_unidentified_contexts_require_exact_positional_alignment():
     payload = [
         {"tokens": META["tokens"], "universe": META["universe"][:2]},
         [
-            {"midPx": "120000", "markPx": "120010", "dayNtlVlm": "8000000"},
+            {"midPx": "77558.5", "markPx": "77558", "dayNtlVlm": "30556047"},
             {"midPx": "4500", "markPx": "4501", "dayNtlVlm": "4000000"},
         ],
     ]
     spots = parse_spot_contexts(payload, captured_at=NOW)
-    assert [spot.book_coin for spot in spots] == ["@107", "@108"]
+    assert [spot.book_coin for spot in spots] == ["@142", "@108"]
 
     with pytest.raises(HyperliquidInfoError, match="length mismatch without context identities"):
         parse_spot_contexts([META, payload[1]], captured_at=NOW)
 
 
-def test_identity_alignment_fails_closed_on_mixed_unknown_or_duplicate_contexts():
-    with pytest.raises(HyperliquidInfoError, match="mixed identified/unidentified"):
+def test_current_market_without_parseable_price_fails_closed():
+    one_market = {
+        "tokens": META["tokens"],
+        "universe": [META["universe"][0]],
+    }
+    with pytest.raises(HyperliquidInfoError, match="failed to parse current spot market: @142"):
         parse_spot_contexts(
-            [META, [{"coin": "@107", "midPx": "1"}, {"midPx": "2"}]],
-            captured_at=NOW,
-        )
-    with pytest.raises(HyperliquidInfoError, match="unknown spot context identity"):
-        parse_spot_contexts([META, [{"coin": "@999", "midPx": "1"}]], captured_at=NOW)
-    with pytest.raises(HyperliquidInfoError, match="duplicate spot context identity"):
-        parse_spot_contexts(
-            [META, [{"coin": "@107", "midPx": "1"}, {"coin": "UBTC/USDC", "midPx": "1"}]],
+            [one_market, [{"coin": "@142", "midPx": None, "markPx": None}]],
             captured_at=NOW,
         )
 
