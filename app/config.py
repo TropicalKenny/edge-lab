@@ -70,7 +70,7 @@ class Settings(BaseSettings):
     solana_max_enrichments_per_cycle: int = 20
     solana_min_enrichment_interval_minutes: int = 15
     solana_shadow_exit_notional_usd: float = 25.0
-    solana_quote_mint: str = 'EPjFWdd5AufqSSqeM2qN1xzybApC8G4wEGGkZwyTDt1v'
+    solana_quote_mint: str = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
     solana_forward_poll_seconds: int = 60
     solana_forward_study_external_id: str = 'solana-pump-baseline-m6g-v1'
     solana_forward_initial_capital_usd: float = 1000.0
