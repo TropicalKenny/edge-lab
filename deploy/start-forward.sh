@@ -50,13 +50,16 @@ docker compose \
   -f docker-compose.yml \
   -f deploy/compose.forward.yml \
   -f deploy/compose.solana-forward.yml \
+  -f deploy/compose.m6j.yml \
   --profile forward \
   --profile solana \
+  --profile research-acceleration \
   up -d --build \
     postgres redis migrate api \
     hyperliquid-collector hyperliquid-forward-bootstrap hyperliquid-forward-runner \
     polymarket-collector polymarket-forward-bootstrap polymarket-forward-runner \
     solana-launch-collector solana-forensic-sampler solana-forward-bootstrap solana-forward-runner \
+    m6j-hyperliquid-research m6j-polymarket-research m6j-solana-research \
     forward-evaluator db-backup
 
 docker compose \
@@ -64,6 +67,8 @@ docker compose \
   -f docker-compose.yml \
   -f deploy/compose.forward.yml \
   -f deploy/compose.solana-forward.yml \
+  -f deploy/compose.m6j.yml \
   --profile forward \
   --profile solana \
+  --profile research-acceleration \
   ps

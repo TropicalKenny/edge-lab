@@ -1,0 +1,67 @@
+services:
+  m6j-hyperliquid-research:
+    profiles: ["research-acceleration"]
+    build: .
+    command: ["python", "-m", "app.workers.m6j_hyperliquid_research"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://edge:${POSTGRES_PASSWORD}@postgres:5432/edge
+      SIGNER_ENABLED: "false"
+      M6J_ENABLED: ${M6J_ENABLED:-true}
+      HYPERLIQUID_NETWORK: mainnet
+      HYPERLIQUID_TIMEOUT_SECONDS: ${HYPERLIQUID_TIMEOUT_SECONDS:-10}
+      M6J_HYPERLIQUID_POLL_SECONDS: ${M6J_HYPERLIQUID_POLL_SECONDS:-900}
+      M6J_HYPERLIQUID_COINS: ${M6J_HYPERLIQUID_COINS:-BTC,ETH,SOL}
+      M6J_HYPERLIQUID_HORIZONS_HOURS: ${M6J_HYPERLIQUID_HORIZONS_HOURS:-24,168,336,720}
+      M6J_HYPERLIQUID_HISTORY_HOURS: ${M6J_HYPERLIQUID_HISTORY_HOURS:-720}
+      HYPERLIQUID_FORWARD_SPOT_FEE_BPS: ${HYPERLIQUID_FORWARD_SPOT_FEE_BPS:-7}
+      HYPERLIQUID_FORWARD_PERP_FEE_BPS: ${HYPERLIQUID_FORWARD_PERP_FEE_BPS:-4.5}
+      HYPERLIQUID_FORWARD_SLIPPAGE_RESERVE_BPS_PER_LEG: ${HYPERLIQUID_FORWARD_SLIPPAGE_RESERVE_BPS_PER_LEG:-2}
+      HYPERLIQUID_FORWARD_MIN_EDGE_BPS: ${HYPERLIQUID_FORWARD_MIN_EDGE_BPS:-10}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  m6j-polymarket-research:
+    profiles: ["research-acceleration"]
+    build: .
+    command: ["python", "-m", "app.workers.m6j_polymarket_research"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://edge:${POSTGRES_PASSWORD}@postgres:5432/edge
+      SIGNER_ENABLED: "false"
+      M6J_ENABLED: ${M6J_ENABLED:-true}
+      POLYMARKET_TIMEOUT_SECONDS: ${POLYMARKET_TIMEOUT_SECONDS:-10}
+      POLYMARKET_MAX_SHARES_PER_OPPORTUNITY: ${POLYMARKET_MAX_SHARES_PER_OPPORTUNITY:-100}
+      POLYMARKET_FORWARD_FEE_BUFFER_PCT: ${POLYMARKET_FORWARD_FEE_BUFFER_PCT:-2}
+      POLYMARKET_MIN_EDGE_BPS: ${POLYMARKET_MIN_EDGE_BPS:-10}
+      POLYMARKET_MAX_NEGRISK_EVENTS: ${POLYMARKET_MAX_NEGRISK_EVENTS:-8}
+      M6J_POLYMARKET_MAX_MARKETS: ${M6J_POLYMARKET_MAX_MARKETS:-200}
+      M6J_POLYMARKET_REFRESH_SECONDS: ${M6J_POLYMARKET_REFRESH_SECONDS:-300}
+      M6J_POLYMARKET_SUMMARY_SECONDS: ${M6J_POLYMARKET_SUMMARY_SECONDS:-60}
+      M6J_POLYMARKET_MIN_EDGE_BPS: ${M6J_POLYMARKET_MIN_EDGE_BPS:-0}
+      M6J_POLYMARKET_MAX_BOOK_AGE_SECONDS: ${M6J_POLYMARKET_MAX_BOOK_AGE_SECONDS:-5}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  m6j-solana-research:
+    profiles: ["research-acceleration"]
+    build: .
+    command: ["python", "-m", "app.workers.m6j_solana_research"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://edge:${POSTGRES_PASSWORD}@postgres:5432/edge
+      SIGNER_ENABLED: "false"
+      M6J_ENABLED: ${M6J_ENABLED:-true}
+      JUPITER_API_KEY: ${JUPITER_API_KEY:?JUPITER_API_KEY is required for M6J quote-only Solana research}
+      JUPITER_TIMEOUT_SECONDS: ${JUPITER_TIMEOUT_SECONDS:-10}
+      M6J_SOLANA_POLL_SECONDS: ${M6J_SOLANA_POLL_SECONDS:-60}
+      M6J_SOLANA_CANDIDATE_AGE_MINUTES: ${M6J_SOLANA_CANDIDATE_AGE_MINUTES:-120}
+      M6J_SOLANA_MAX_SAMPLES_PER_CYCLE: ${M6J_SOLANA_MAX_SAMPLES_PER_CYCLE:-20}
+      M6J_SOLANA_MAX_OUTCOMES_PER_CYCLE: ${M6J_SOLANA_MAX_OUTCOMES_PER_CYCLE:-40}
+      M6J_SOLANA_QUOTE_NOTIONAL_USD: ${M6J_SOLANA_QUOTE_NOTIONAL_USD:-25}
+      M6J_SOLANA_OUTCOME_HORIZONS_MINUTES: ${M6J_SOLANA_OUTCOME_HORIZONS_MINUTES:-5,15,30,60}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
