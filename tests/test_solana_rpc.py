@@ -6,6 +6,7 @@ import pytest
 
 from app.venues.solana import PUMP_AMM_PROGRAM_ID, PUMP_PROGRAM_ID, SolanaResearchError
 from app.venues.solana_rpc import SolanaRpcAssetClient, SolanaRpcClient, SolanaRpcPumpStream
+from app.venues.solana_rpc_sampled import SolanaRpcSampledPumpStream
 
 MINT = "Mint111111111111111111111111111111111111111"
 CREATOR = "Creator11111111111111111111111111111111111"
@@ -49,6 +50,43 @@ def test_standard_rpc_stream_filters_before_transaction_fetch_and_normalizes():
     assert result["signature"] == "sig-1"
     assert result["slot"] == 124
     assert result["transaction"]["transaction"]["message"]["accountKeys"][1] == MINT
+
+
+def test_sampled_rpc_discovery_has_hard_alchemy_cu_ceiling():
+    stream = SolanaRpcSampledPumpStream(http_url="https://example.invalid/rpc")
+    assert stream.program_ids == [PUMP_PROGRAM_ID]
+    assert stream.estimated_cu_per_poll == 160
+    assert stream.estimated_hourly_cu == 9600
+
+    with pytest.raises(ValueError, match="exceeds hourly RPC CU budget"):
+        SolanaRpcSampledPumpStream(
+            http_url="https://example.invalid/rpc",
+            max_transactions_per_poll=4,
+        )
+
+
+def test_sampled_rpc_discovery_selection_is_deterministic_and_bounded():
+    stream = SolanaRpcSampledPumpStream(http_url="https://example.invalid/rpc")
+    rows = [
+        ("sig-c", 3),
+        ("sig-a", 1),
+        ("sig-b", 2),
+        ("sig-d", 4),
+        ("sig-a", 99),
+    ]
+    first = stream._select_transactions(rows)
+    second = stream._select_transactions(list(reversed(rows)))
+    assert first == second
+    assert len(first) == 3
+    assert len({signature for signature, _ in first}) == 3
+
+
+def test_launch_collector_uses_bounded_http_sampler_not_broad_websocket():
+    collector = open("app/workers/solana_launch_collector.py", encoding="utf-8").read()
+    assert "SolanaRpcSampledPumpStream" in collector
+    assert "program_ids=[PUMP_PROGRAM_ID]" in collector
+    assert "broad RPC WebSocket disabled" in collector
+    assert "SolanaRpcPumpStream(" not in collector
 
 
 def test_standard_rpc_asset_client_parses_spl_mint_metadata():
