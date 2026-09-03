@@ -6,9 +6,11 @@ Last updated: 3 September 2026, Africa/Lagos.
 
 ## Current live deployment
 
-Verified deployed runtime code revision before this docs-only update:
+Verified deployed runtime code revision:
 
-`5f782b6c7cbc144774d9c9ec000b98bbab369c18`
+`f454e7fb64eb117278fcc8f1def1153d896cf39e`
+
+PR #49: `feat: add Telegram paper trade and daily heartbeat alerts`.
 
 VPS checkout:
 
@@ -16,18 +18,21 @@ VPS checkout:
 
 Host: OVH Ubuntu VPS, application user `ubuntu`.
 
-Settled typed status run `33747323362` verified:
+Settled typed status run `33749858549` verified:
 
+- deployed SHA `f454e7fb64eb117278fcc8f1def1153d896cf39e`;
 - Hyperliquid forward runner healthy;
 - Polymarket forward runner healthy;
 - Solana forward runner healthy;
 - PostgreSQL healthy;
 - dashboard healthy;
 - private owner control healthy;
+- Telegram controls running with restart count `0`;
+- Telegram alerts running with restart count `0`;
 - all observed container restart counts `0`;
 - signer disabled.
 
-Post-fix research snapshot run `33747246524` verified all three studies operationally `ready`, with no hard reasons or warnings and zero permanent data-integrity incidents.
+Post-alert research snapshot run `33749917961`, captured at `2026-09-03T11:29:11Z`, verified all three studies operationally `ready`, with no hard reasons or warnings and zero permanent data-integrity incidents. At that capture there were still zero open positions, zero closed trades, zero execution observations, `$3,000` aggregate simulated NAV and `$0` net P&L.
 
 ## Current safety boundary
 
@@ -60,7 +65,7 @@ The full current paper/shadow stack includes:
 - read-only Dashboard V1 on `127.0.0.1:8080`;
 - private owner-control API on `127.0.0.1:8090`;
 - Telegram owner controls;
-- Telegram owner alerts.
+- Telegram owner alerts, including paper/shadow trade lifecycle notifications and daily heartbeat.
 
 No GPU is required.
 
@@ -158,7 +163,9 @@ returns HTTP 422. Edge Lab now uses:
 
 `order=liquidityNum`
 
-A live public diagnostic confirmed the latter returns HTTP 200. Runtime revision `5f782b6...` includes the fix and regression coverage.
+A live public diagnostic confirmed the latter returns HTTP 200.
+
+The current M6F research action is immediate/completion-style. Telegram therefore reports a persisted Polymarket trade record as a `PAPER/SHADOW TRADE COMPLETED` event rather than fabricating a durable open-position alert.
 
 ### Solana M6G
 
@@ -204,11 +211,75 @@ The final fix writes the safe menu to six Telegram command variants at worker st
 - exact owner chat, generic;
 - exact owner chat, English.
 
-One-time post-deployment API verification run `33747154288` queried all six scopes. Every scope returned the safe 14-command list, with no missing or unexpected commands and `all_scopes_ok=true`.
+One-time post-deployment API verification run `33747154288` queried all six scopes. Every scope returned the safe 14-command list, with no missing or unexpected commands and `all_scopes_ok=true`. Settled status run `33749858549` again reported `telegram_menu_ok=true`.
 
 If Telegram on a phone still shows the old menu after that verified server state, close/reopen the menu/chat/app before changing server code again; that would be local Telegram client cache.
 
 Telegram authorization still requires both the exact configured owner chat and owner user ID. Unauthorized updates are ignored/consumed safely. Telegram has no wallet, signer, shell, or live-capital capability.
+
+## Telegram paper/shadow activity alerts
+
+PR #49 adds owner awareness without adding trading authority.
+
+### Open notifications
+
+Hyperliquid durable position rows and accepted Solana M6G entries generate one Telegram `PAPER/SHADOW TRADE OPENED` event after the research state has been persisted.
+
+The alert includes, as applicable:
+
+- venue;
+- study;
+- asset/instrument;
+- simulated allocation;
+- shadow/entry prices;
+- fees where available;
+- opening timestamp;
+- planned hold/close time;
+- a clear paper/shadow/no-real-money warning.
+
+Rejected Solana entries do not alert.
+
+### Close/completion notifications
+
+Each immutable `ForwardTradeRecord` can generate exactly one Telegram close/completion event containing:
+
+- venue/study/instrument;
+- simulated allocation;
+- net P&L in dollars and percent;
+- fees;
+- slippage/cost divergence;
+- hold duration;
+- exit/completion reason;
+- opened/closed timestamps;
+- `PAPER/SHADOW ONLY` warning.
+
+Hyperliquid/Solana held-position events use `TRADE CLOSED`; Polymarket's immediate structure uses `TRADE COMPLETED`.
+
+### Idempotency/restarts
+
+Event keys are derived from persisted position/execution/trade IDs. The notification table has a unique `(channel, event_key)` constraint and rejects conflicting duplicate payloads. Restarting the Telegram alert worker does not legitimately resend the same persisted trade event.
+
+### Daily heartbeat
+
+Default configuration:
+
+`TELEGRAM_HEARTBEAT_HOUR_UTC=18`
+
+This means approximately **19:00 Africa/Lagos**.
+
+There is at most one `daily-heartbeat:YYYY-MM-DD` event per UTC date. The heartbeat reports:
+
+- active studies;
+- per-study simulated NAV and closed-trade count;
+- currently open paper/shadow positions;
+- combined simulated NAV;
+- number of trades completed that UTC day;
+- a no-trade-but-still-watching statement when no trade completed;
+- instruction to use `/research` for the detailed readiness/evidence snapshot.
+
+Existing critical/data-integrity and evidence-state alerts remain active.
+
+Feature verification: one-time run `33749291095` passed the full repository verifier. Temporary verification workflows were removed. Deployment run `33749496652` completed successfully. Settled status run `33749858549` verified `edge-lab-telegram-alerts-1=0` restarts.
 
 ## Research snapshot for ChatGPT/manual review
 
@@ -228,7 +299,7 @@ It refuses to run if signing is enabled.
 
 Aurent's typed `research-snapshot` operation runs the snapshot inside the dashboard service using the `edge_dashboard` read-only database identity.
 
-This lets ChatGPT manually review fresh Edge Lab evidence when the owner asks, without requiring a GPT API key or granting a model autonomous server access.
+This lets ChatGPT manually review fresh Edge Lab evidence when the owner asks, without requiring a GPT API key or granting a model autonomous unrestricted server access.
 
 ## Dashboard and future Cloudflare publication
 
@@ -246,6 +317,8 @@ When the owner chooses to publish it:
 6. keep the dashboard DB identity `edge_dashboard` read-only.
 
 The future browser mutation adapter must validate Cloudflare Access identity and CSRF server-side, then proxy only typed owner-control commands. Never expose the private owner-control bearer token to browser JavaScript and never expose `127.0.0.1:8090` directly to the public Internet.
+
+This Cloudflare-protected dashboard is the next build item while the research stack continues accumulating evidence.
 
 ## Verification commands/reference
 
@@ -271,9 +344,9 @@ Evidence must still satisfy the registered sample, cost/slippage, drawdown, NAV-
 
 Guard all research against look-ahead bias, survivorship bias, outcome leakage, cherry-picked horizons, multiple-testing overfit, and inconsistent cost assumptions.
 
-## Current first evidence snapshot
+## Current evidence snapshot
 
-At `2026-09-03T10:59:38Z`:
+At `2026-09-03T11:29:11Z`:
 
 - three active forward studies;
 - independent simulated starting capital: `$1,000` each / `$3,000` aggregate;
@@ -283,22 +356,24 @@ At `2026-09-03T10:59:38Z`:
 - execution observations: `0`;
 - permanent data-integrity incidents: `0`;
 - contaminated studies: `0`;
-- Hyperliquid: ready;
+- Hyperliquid: ready, open positions `0`;
 - Polymarket: ready;
-- Solana: ready.
+- Solana: ready, open positions `0`.
 
 The six unresolved incidents are historical provider/parser errors and are marked non-data-integrity. Preserve them as audit history unless existing incident-control rules explicitly allow resolution; never delete research history to make a dashboard look cleaner.
 
 ## First 24-hour / continuing soak
 
-The infrastructure blocker phase is complete. The next job is evidence accumulation rather than more provider replacement.
+The infrastructure and owner-observability blocker phase is complete. The next job is evidence accumulation rather than more provider replacement.
 
 During soak, check:
 
 - fresh readiness and NAV cadence;
 - restart-count growth;
 - new critical or data-integrity incidents;
-- actual closed trades/execution observations;
+- actual open/closed trades and execution observations;
+- Telegram trade-open/trade-close delivery;
+- daily 19:00 Lagos heartbeat delivery;
 - fees and slippage;
 - realized/stressed net P&L;
 - drawdown;
@@ -317,10 +392,14 @@ Use GitHub Actions deliberately only where the remote run itself is justified, s
 Recent justified operational runs:
 
 - `33746584336` — full repository verification for final Polymarket/Telegram fix;
-- `33746731801` — deploy runtime revision `5f782b6...`;
+- `33746731801` — deploy final Polymarket/menu fix;
 - `33747154288` — exact six-scope Telegram verification;
 - `33747246524` — post-fix research snapshot;
-- `33747323362` — settled status and restart counts.
+- `33747323362` — settled pre-alert status and restart counts;
+- `33749291095` — full repository verification for Telegram paper trade/heartbeat alerts;
+- `33749496652` — deploy runtime revision `f454e7f...`;
+- `33749858549` — settled post-alert status and restart counts;
+- `33749917961` — post-alert research snapshot.
 
 ## Continuation checklist for a new chat/agent
 
@@ -329,6 +408,8 @@ Recent justified operational runs:
 3. Use Aurent `status` and `research-snapshot` before changing a venue/provider because of historical incidents.
 4. Do not reintroduce Helius as a required blocker unless the architecture changes; standard RPC through Alchemy is currently live.
 5. Do not reintroduce legacy Telegram live-trading commands.
-6. Do not change the frozen M6G entry baseline while studying M6H lifecycle behavior.
-7. Do not add live execution/signing/fund movement without a separate explicitly authorized milestone.
-8. Continue evidence accumulation and review the first real trades/execution observations when they appear.
+6. Preserve the PR #49 trade-alert idempotency and paper/shadow-only wording.
+7. Do not change the frozen M6G entry baseline while studying M6H lifecycle behavior.
+8. Do not add live execution/signing/fund movement without a separate explicitly authorized milestone.
+9. Continue evidence accumulation and review the first real trades/execution observations when they appear.
+10. Next build: publish the read-only dashboard behind owner-only Cloudflare Access, then add a typed authenticated browser mutation adapter only if requested.
