@@ -1,0 +1,110 @@
+name: Retry Research Scan Telemetry Once
+
+on:
+  push:
+    branches:
+      - feat/research-scan-telemetry
+    paths:
+      - .github/workflows/retry-research-scan-telemetry-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  implement-and-verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: edge
+          POSTGRES_PASSWORD: edge_test_password
+          POSTGRES_DB: edge
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U edge -d edge"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/research-scan-telemetry
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Reapply implementation and fix injected-candidate compatibility
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import textwrap
+
+          workflow = Path('.github/workflows/implement-research-scan-telemetry-once.yml')
+          raw = workflow.read_text()
+          start_marker = "          python - <<'PY'\n"
+          end_marker = "          PY\n      - name: Install"
+          start = raw.index(start_marker) + len(start_marker)
+          end = raw.index(end_marker, start)
+          program = textwrap.dedent(raw[start:end])
+          exec(compile(program, str(workflow), 'exec'), {'__name__': '__main__'})
+
+          # Existing deterministic Polymarket tests intentionally monkeypatch discovery
+          # with a plain candidate list. Keep that injection contract while the live
+          # discovery path returns (candidates, metadata).
+          path = Path('app/polymarket_forward.py')
+          text = path.read_text()
+          old = "        candidates, discovery_meta = await self._discover_candidates(config)\n"
+          new = '''        discovery_result = await self._discover_candidates(config)\n        if (\n            isinstance(discovery_result, tuple)\n            and len(discovery_result) == 2\n            and isinstance(discovery_result[1], dict)\n        ):\n            candidates, discovery_meta = discovery_result\n        else:\n            candidates = discovery_result\n            discovery_meta = {\n                "markets_discovered": 0,\n                "markets_validated": 0,\n                "structural_candidates": len(candidates),\n            }\n'''
+          if text.count(old) != 1:
+              raise SystemExit('Polymarket compatibility insertion point changed')
+          path.write_text(text.replace(old, new, 1))
+
+          # Telemetry is observational. A worker restart inside the same cycle bucket
+          # must not fail the research loop just because the first cycle row already exists.
+          path = Path('app/scan_telemetry.py')
+          text = path.read_text()
+          old = '''    if existing is not None:\n        # Candidate keys are deliberately stable. Re-observing the same frozen decision\n        # returns the original row rather than double-counting it.\n        if (\n'''
+          new = '''    if existing is not None:\n        # Cycle keys are bucketed heartbeats. A restart in the same bucket reuses the\n        # first durable observation instead of turning telemetry into a runtime blocker.\n        if existing.observation_kind == "cycle" and observation_kind == "cycle":\n            return existing\n        # Candidate keys are deliberately stable. Re-observing the same frozen decision\n        # returns the original row rather than double-counting it.\n        if (\n'''
+          if text.count(old) != 1:
+              raise SystemExit('scan telemetry duplicate-handling insertion point changed')
+          path.write_text(text.replace(old, new, 1))
+
+          # Add regression coverage for both compatibility rules.
+          test_path = Path('tests/test_scan_telemetry.py')
+          tests = test_path.read_text()
+          tests += '''\n\ndef test_duplicate_cycle_bucket_is_non_blocking_even_if_detail_changes():\n    db = db_session()\n    first = record_scan_observation(\n        db, study_id="study-1", external_key="cycle:same", observation_kind="cycle",\n        observed_at=NOW, metadata={"launches_in_window": 10},\n    )\n    again = record_scan_observation(\n        db, study_id="study-1", external_key="cycle:same", observation_kind="cycle",\n        observed_at=NOW, metadata={"launches_in_window": 11},\n    )\n    assert again.id == first.id\n    activity = scan_activity_summary(db, study_id="study-1", now=NOW)\n    assert activity["cycles"] == 1\n    assert activity["metadata_totals"]["launches_in_window"] == 10\n'''
+          test_path.write_text(tests)
+
+          # The first workflow self-deleted itself. Remove this retry workflow too so
+          # the implementation commit leaves no persistent Actions trigger behind.
+          Path('.github/workflows/retry-research-scan-telemetry-once.yml').unlink()
+          PY
+      - name: Install
+        run: pip install -e . pytest
+      - name: Focused telemetry and venue tests
+        run: pytest -q tests/test_scan_telemetry.py tests/test_research_snapshot.py tests/test_polymarket_forward.py tests/test_solana_forward.py tests/test_hyperliquid_forward_hardened.py tests/test_dashboard_hosting.py tests/test_deployment_preflight.py
+      - name: Compile
+        run: python -m compileall -q app tests
+      - name: Fresh Alembic migration
+        env:
+          DATABASE_URL: postgresql+psycopg://edge:edge_test_password@127.0.0.1:5432/edge
+        run: alembic upgrade head
+      - name: Full repository verification
+        run: sh scripts/verify-repo.sh
+      - name: Safety and workflow residue
+        run: |
+          test ! -e .github/workflows/implement-research-scan-telemetry-once.yml
+          test ! -e .github/workflows/retry-research-scan-telemetry-once.yml
+          grep -q 'signer_enabled: bool = False' app/config.py
+          ! grep -R --line-number --exclude-dir=.git -E 'sendTransaction|/execute' app/scan_telemetry.py app/research_snapshot.py
+      - name: Commit verified implementation
+        run: |
+          git config user.name "TropicalKenny"
+          git config user.email "138382176+TropicalKenny@users.noreply.github.com"
+          git add -A
+          git commit -m "feat: add research scan telemetry"
+          git push origin HEAD:feat/research-scan-telemetry
