@@ -15,6 +15,7 @@ from app.solana_research import ForwardLabelService, SolanaForensicService
 from app.services import HealthRegistry
 from app.venues.solana import DexScreenerClient, GoPlusSolanaClient, JupiterShadowClient
 from app.venues.solana_asset import HeliusAssetClient
+from app.venues.solana_rpc import SolanaRpcAssetClient
 from app.venues.solana_models import SolanaForensicFeatureSnapshot, SolanaLaunchEvent
 
 log = logging.getLogger("edge_lab.solana_forensic_sampler")
@@ -71,9 +72,17 @@ async def run_cycle() -> int:
                     timeout_seconds=settings.goplus_timeout_seconds,
                 )
             )
-            helius = None
-            if settings.helius_api_key:
-                helius = await stack.enter_async_context(
+            asset_client = None
+            if settings.solana_rpc_http_url.strip():
+                asset_client = await stack.enter_async_context(
+                    SolanaRpcAssetClient(
+                        http_url=settings.solana_rpc_http_url,
+                        commitment=settings.solana_rpc_commitment,
+                        timeout_seconds=settings.solana_rpc_timeout_seconds,
+                    )
+                )
+            elif settings.helius_api_key:
+                asset_client = await stack.enter_async_context(
                     HeliusAssetClient(api_key=settings.helius_api_key, timeout_seconds=10)
                 )
             jupiter = None
@@ -87,7 +96,7 @@ async def run_cycle() -> int:
             service = SolanaForensicService(
                 dexscreener=dex,
                 goplus=goplus,
-                helius_assets=helius,
+                helius_assets=asset_client,
                 jupiter=jupiter,
                 health=health,
                 quote_mint=settings.solana_quote_mint,

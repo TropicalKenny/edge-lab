@@ -20,8 +20,17 @@ set +a
 
 : "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}"
 : "${FORWARD_INGEST_SECRET:?FORWARD_INGEST_SECRET is required}"
-: "${HELIUS_API_KEY:?HELIUS_API_KEY is required for Solana forward research}"
 : "${JUPITER_API_KEY:?JUPITER_API_KEY is required for quote-only Solana forward research}"
+
+if [ -n "${SOLANA_RPC_HTTP_URL:-}" ] || [ -n "${SOLANA_RPC_WS_URL:-}" ]; then
+  [ -n "${SOLANA_RPC_HTTP_URL:-}" ] && [ -n "${SOLANA_RPC_WS_URL:-}" ] || {
+    echo "SOLANA_RPC_HTTP_URL and SOLANA_RPC_WS_URL must be configured together." >&2
+    exit 1
+  }
+elif [ -z "${HELIUS_API_KEY:-}" ]; then
+  echo "Solana research requires standard SOLANA_RPC_HTTP_URL + SOLANA_RPC_WS_URL or legacy HELIUS_API_KEY." >&2
+  exit 1
+fi
 
 if [ "$POSTGRES_PASSWORD" = "replace-with-a-long-random-password" ] || \
    [ "$FORWARD_INGEST_SECRET" = "replace-with-a-separate-long-random-secret" ]; then

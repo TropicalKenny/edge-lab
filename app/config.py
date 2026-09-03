@@ -51,6 +51,11 @@ class Settings(BaseSettings):
     polymarket_forward_attempt_interval_seconds: int = 300
     polymarket_forward_max_attempts_per_cycle: int = 3
     polymarket_forward_health_max_nav_age_seconds: int = 7200
+    solana_rpc_http_url: str = ''
+    solana_rpc_ws_url: str = ''
+    solana_rpc_timeout_seconds: float = 10.0
+    solana_rpc_commitment: str = 'confirmed'
+    solana_pump_program_ids: str = '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P,pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA'
     helius_api_key: str = ''
     helius_commitment: str = 'confirmed'
     helius_pump_program_ids: str = '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P,pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA'
