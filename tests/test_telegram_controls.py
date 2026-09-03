@@ -11,7 +11,7 @@ import app.lifecycle_models
 from app.config import Settings
 from app.forward_models import ForwardNavObservation, ForwardStudy
 from app.models import Base, Experiment, Strategy, StrategyVersion
-from app.telegram_control import TelegramControlRouter
+from app.telegram_control import BOT_COMMANDS, HELP_TEXT, TelegramControlRouter
 
 
 def db_session() -> Session:
@@ -103,6 +103,17 @@ def test_authorization_requires_both_private_chat_and_owner_user():
     assert r.authorized_message(wrong_chat) is None
 
 
+def test_owner_menu_prioritizes_research_and_preserves_controls():
+    commands = [item["command"] for item in BOT_COMMANDS]
+    assert commands[0] == "research"
+    assert len(commands) == len(set(commands))
+    for command in ("status", "performance", "evidence", "pause", "resume", "freeze", "lifecycle", "incident", "help"):
+        assert command in commands
+    assert "/research" in HELP_TEXT
+    assert "/pause <solana|polymarket|hyperliquid|all>" in HELP_TEXT
+    assert "Live capital is $0" in HELP_TEXT
+
+
 def test_balance_is_explicitly_simulated_and_never_implies_live_capital():
     db = db_session()
     solana_study(db)
@@ -113,6 +124,19 @@ def test_balance_is_explicitly_simulated_and_never_implies_live_capital():
     assert "+12.50%" in text
     assert "Live capital: $0.00" in text
     assert "Signer: DISABLED" in text
+
+
+def test_research_command_is_consolidated_and_explicitly_read_only():
+    db = db_session()
+    solana_study(db)
+    text = router().render(db, "/research")
+    assert "EDGE LAB — RESEARCH SNAPSHOT" in text
+    assert "SOLANA — Solana Test" in text
+    assert "Mode: PAPER/SHADOW" in text
+    assert "Signer: DISABLED" in text
+    assert "Live capital: $0.00" in text
+    assert "cannot trade, sign, move funds, access a wallet, or execute shell commands" in text
+    assert router().render(db, "/snapshot") == text or "EDGE LAB — RESEARCH SNAPSHOT" in router().render(db, "/snapshot")
 
 
 def test_pause_command_uses_shared_owner_control_service():
