@@ -102,7 +102,7 @@ for path in ("/signer/status","/risk/evaluate","/paper/simulate","/forward/ops/s
   docker compose $BASE_ARGS $EXTRA_ARGS --profile forward --profile solana exec -T dashboard python -c '
 from sqlalchemy import create_engine, text
 from app.config import get_settings
-expected={"strategies","strategy_versions","strategy_evaluation_runs","forward_studies","forward_nav_observations","forward_study_incidents","forward_trade_records","forward_execution_records"}
+expected={"strategies","strategy_versions","strategy_evaluation_runs","forward_studies","forward_nav_observations","forward_study_incidents","forward_trade_records","forward_execution_records","forward_scan_observations"}
 engine=create_engine(get_settings().database_url)
 with engine.connect() as conn:
     user=conn.scalar(text("SELECT current_user"))

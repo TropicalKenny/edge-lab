@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import datetime, timezone
 
 from app.config import get_settings
 from app.database import get_session_factory
 from app.hyperliquid_forward_operational import OperationalHyperliquidCarryForwardRunner
 from app.services import HealthRegistry
+from app.scan_telemetry import normalize_reason, record_scan_observation
 from app.venues.hyperliquid import HyperliquidInfoClient
 
 log = logging.getLogger("edge_lab.hyperliquid_forward_runner")
@@ -27,6 +29,34 @@ async def run() -> None:
             try:
                 results = await runner.run_active_studies(db)
                 for result in results:
+                    observed_at = datetime.now(timezone.utc)
+                    record_scan_observation(
+                        db,
+                        study_id=result.study_id,
+                        external_key=f"hyperliquid-cycle:{int(observed_at.timestamp() // settings.hyperliquid_forward_poll_seconds)}",
+                        observation_kind="cycle",
+                        observed_at=observed_at,
+                        metadata={"action": result.action, "detail": result.detail},
+                    )
+                    if result.action in {"opened", "no_entry", "entry_rejected", "entry_rejected_capital"}:
+                        if result.action == "opened":
+                            accepted_count, rejected_count, reasons = 1, 0, {}
+                        else:
+                            accepted_count, rejected_count = 0, 1
+                            raw_reasons = str(result.detail).split(",") if result.action == "no_entry" else [result.detail]
+                            reasons = {normalize_reason(reason): 1 for reason in raw_reasons if str(reason).strip()}
+                        record_scan_observation(
+                            db,
+                            study_id=result.study_id,
+                            external_key=f"hyperliquid-candidate:{int(observed_at.timestamp() // settings.hyperliquid_forward_poll_seconds)}",
+                            observation_kind="candidate",
+                            observed_at=observed_at,
+                            examined_count=1,
+                            accepted_count=accepted_count,
+                            rejected_count=rejected_count,
+                            rejection_reasons=reasons,
+                            metadata={"action": result.action},
+                        )
                     log.info(
                         "Hyperliquid forward study %s: %s - %s",
                         result.study_id,
