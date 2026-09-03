@@ -33,6 +33,8 @@ text = path.read_text()
 replacements = {
     "POSTGRES_PASSWORD=replace-with-a-long-random-password": f"POSTGRES_PASSWORD={token_urlsafe(36)}",
     "FORWARD_INGEST_SECRET=replace-with-a-separate-long-random-secret": f"FORWARD_INGEST_SECRET={token_urlsafe(48)}",
+    "CONTROL_DB_PASSWORD=": f"CONTROL_DB_PASSWORD={token_urlsafe(36)}",
+    "OWNER_CONTROL_API_TOKEN=": f"OWNER_CONTROL_API_TOKEN={token_urlsafe(48)}",
     "DASHBOARD_DB_PASSWORD=": f"DASHBOARD_DB_PASSWORD={token_urlsafe(36)}",
 }
 for old, new in replacements.items():
@@ -45,23 +47,29 @@ PY
 chmod 600 "$TARGET"
 
 cat <<'EOF'
-Created deploy/.env.forward with generated internal secrets, a separate dashboard read-only DB password, and mode 600.
+Created deploy/.env.forward with generated internal secrets and mode 600.
 
-Still required before full deployment:
-  - HELIUS_API_KEY             (research data only)
-  - JUPITER_API_KEY            (quote-only research API)
-  - CLOUDFLARE_TUNNEL_TOKEN    (Dashboard V1 tunnel)
+Generated locally on this VPS:
+  - PostgreSQL application password
+  - forward-ingest secret
+  - dedicated owner-control database password
+  - private owner-control API token
+  - separate dashboard read-only database password
+
+Required to start the dedicated Telegram control worker:
+  - TELEGRAM_BOT_TOKEN
+  - TELEGRAM_CHAT_ID
+  - TELEGRAM_OWNER_USER_ID
+
+Can be added later before Solana M6G/M6H starts:
+  - HELIUS_API_KEY
+  - JUPITER_API_KEY
+
+Can be added later before publishing the dashboard through Cloudflare:
+  - CLOUDFLARE_TUNNEL_TOKEN
 
 Optional research/security enrichment:
   - GOPLUS_ACCESS_TOKEN
 
-Optional owner notifications:
-  - TELEGRAM_BOT_TOKEN
-  - TELEGRAM_CHAT_ID
-
-Telegram credentials are notification-only. They are not wallet, venue, signing, or withdrawal credentials.
-
-Do NOT add a wallet private key, seed phrase, mnemonic, or owner-vault credential.
-After filling the mandatory external credentials, run:
-  sh deploy/preflight-forward.sh
+Do NOT add a wallet private key, seed phrase, mnemonic, owner-vault credential, exchange withdrawal key or signer secret.
 EOF

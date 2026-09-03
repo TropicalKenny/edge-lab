@@ -4,8 +4,12 @@ import asyncio
 import logging
 import os
 
+from sqlalchemy import select
+
 from app.config import get_settings
+from app.control_service import OwnerControlService
 from app.database import get_session_factory
+from app.forward_models import ForwardStudy
 from app.solana_lifecycle import SolanaLifecycleResearchRunner
 from app.venues.solana import JupiterShadowClient
 
@@ -30,6 +34,27 @@ async def run_cycle() -> None:
     SessionLocal = get_session_factory()
     db = SessionLocal()
     try:
+        active_studies = list(
+            db.scalars(
+                select(ForwardStudy).where(
+                    ForwardStudy.status == "active",
+                    ForwardStudy.venue == "solana",
+                    ForwardStudy.family == "meme",
+                )
+            ).all()
+        )
+        enabled = [
+            study for study in active_studies
+            if OwnerControlService.lifecycle_enabled(db, study.id)
+        ]
+        if not enabled:
+            log.info("M6H lifecycle disabled by owner control; no observations recorded")
+            return
+        if len(enabled) != len(active_studies):
+            raise RuntimeError(
+                "mixed per-study M6H lifecycle state is not supported; refusing cycle fail-closed"
+            )
+
         async with JupiterShadowClient(
             api_key=settings.jupiter_api_key,
             timeout_seconds=settings.jupiter_timeout_seconds,
