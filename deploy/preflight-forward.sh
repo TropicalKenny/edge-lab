@@ -38,8 +38,20 @@ set +a
 
 : "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}"
 : "${FORWARD_INGEST_SECRET:?FORWARD_INGEST_SECRET is required}"
-: "${HELIUS_API_KEY:?HELIUS_API_KEY is required for Solana research}"
 : "${JUPITER_API_KEY:?JUPITER_API_KEY is required for quote-only Solana research}"
+
+if [ -n "${SOLANA_RPC_HTTP_URL:-}" ] || [ -n "${SOLANA_RPC_WS_URL:-}" ]; then
+  [ -n "${SOLANA_RPC_HTTP_URL:-}" ] || fail "SOLANA_RPC_HTTP_URL is required when SOLANA_RPC_WS_URL is configured"
+  [ -n "${SOLANA_RPC_WS_URL:-}" ] || fail "SOLANA_RPC_WS_URL is required when SOLANA_RPC_HTTP_URL is configured"
+  case "$SOLANA_RPC_HTTP_URL" in https://*) ;; *) fail "SOLANA_RPC_HTTP_URL must use https://" ;; esac
+  case "$SOLANA_RPC_WS_URL" in wss://*) ;; *) fail "SOLANA_RPC_WS_URL must use wss://" ;; esac
+  pass "standard Solana RPC HTTP/WebSocket provider is configured"
+elif [ -n "${HELIUS_API_KEY:-}" ]; then
+  pass "legacy Helius Solana provider fallback is configured"
+else
+  fail "Solana research requires SOLANA_RPC_HTTP_URL + SOLANA_RPC_WS_URL or HELIUS_API_KEY"
+fi
+
 [ "${SIGNER_ENABLED:-false}" = "false" ] || fail "SIGNER_ENABLED must be false"
 export SIGNER_ENABLED=false
 
