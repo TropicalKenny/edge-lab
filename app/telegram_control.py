@@ -127,8 +127,25 @@ class TelegramControlClient:
             raise TelegramControlError(f"Telegram rejected request: {description[:200]}")
         return body
 
-    async def set_commands(self) -> None:
-        await self._call("setMyCommands", {"commands": BOT_COMMANDS})
+    async def set_commands(self, *, chat_id: str | None = None) -> None:
+        # Telegram command menus are persisted independently by scope and language.
+        # Synchronize every scope that can govern the owner's private bot chat so
+        # legacy live-trading commands cannot survive as a chat-specific override.
+        scopes: list[dict[str, Any] | None] = [
+            None,
+            {"type": "all_private_chats"},
+        ]
+        if chat_id:
+            scopes.append({"type": "chat", "chat_id": chat_id})
+
+        for scope in scopes:
+            for language_code in (None, "en"):
+                payload: dict[str, Any] = {"commands": BOT_COMMANDS}
+                if scope is not None:
+                    payload["scope"] = scope
+                if language_code is not None:
+                    payload["language_code"] = language_code
+                await self._call("setMyCommands", payload)
 
     async def get_updates(self, *, offset: int | None) -> list[dict[str, Any]]:
         payload: dict[str, Any] = {
