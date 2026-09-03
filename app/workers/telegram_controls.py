@@ -25,9 +25,14 @@ async def run() -> None:
         request_timeout_seconds=settings.telegram_timeout_seconds,
     ) as client:
         while True:
-            db = SessionLocal()
             try:
-                offset = router.load_offset(db)
+                # Never hold a database transaction open while Telegram long-polls.
+                db = SessionLocal()
+                try:
+                    offset = router.load_offset(db)
+                finally:
+                    db.close()
+
                 updates = await client.get_updates(offset=offset)
                 for update in updates:
                     update_id_raw = update.get("update_id")
@@ -37,29 +42,52 @@ async def run() -> None:
                     authorized = router.authorized_message(update)
                     if authorized is None:
                         # Consume untrusted/irrelevant updates so they cannot be replayed forever.
-                        router.store_offset(db, update_id + 1)
+                        db = SessionLocal()
+                        try:
+                            router.store_offset(db, update_id + 1)
+                        except Exception:
+                            db.rollback()
+                            raise
+                        finally:
+                            db.close()
                         continue
+
                     chat_id, user_id, text = authorized
-                    response = router.apply(
-                        db,
-                        update_id=update_id,
-                        user_id=user_id,
-                        text=text,
-                    )
-                    if response is None:
-                        response = router.render(db, text)
+                    # Build/apply the response while the DB session is open, then close it
+                    # before awaiting Telegram. Mutations are idempotent, so a failed send
+                    # may safely retry the same update without duplicating the command.
+                    db = SessionLocal()
+                    try:
+                        response = router.apply(
+                            db,
+                            update_id=update_id,
+                            user_id=user_id,
+                            text=text,
+                        )
+                        if response is None:
+                            response = router.render(db, text)
+                    except Exception:
+                        db.rollback()
+                        raise
+                    finally:
+                        db.close()
+
                     await client.send(chat_id=chat_id, text=response)
-                    # Advance only after the command was applied/read and the response was sent.
-                    # Mutating commands are idempotent, so a retry before this point is safe.
-                    router.store_offset(db, update_id + 1)
+
+                    # Advance the durable cursor only after the response was sent.
+                    db = SessionLocal()
+                    try:
+                        router.store_offset(db, update_id + 1)
+                    except Exception:
+                        db.rollback()
+                        raise
+                    finally:
+                        db.close()
             except asyncio.CancelledError:
                 raise
             except Exception:
-                db.rollback()
                 log.exception("Telegram owner-control cycle failed")
                 await asyncio.sleep(settings.telegram_control_retry_seconds)
-            finally:
-                db.close()
 
 
 if __name__ == "__main__":
