@@ -22,18 +22,19 @@ VPS checkout: `/home/ubuntu/workspace/edge-lab`
 
 VPS host: OVH, Ubuntu user `ubuntu`
 
-Verified deployed **runtime code revision before this docs-only handoff update**:
+Verified deployed runtime code revision:
 
-`5f782b6c7cbc144774d9c9ec000b98bbab369c18`
+`f454e7fb64eb117278fcc8f1def1153d896cf39e`
 
-That revision is PR #47, `fix: repair Polymarket keyset and Telegram scoped menu`.
+That revision is PR #49, `feat: add Telegram paper trade and daily heartbeat alerts`.
 
-Current `main` may be newer after this handoff documentation is merged. Do not redeploy just because a docs-only commit advances `main`; compare the changed files first.
+Current `main` may become newer after documentation-only commits. Do not redeploy merely because documentation advances `main`; compare changed files first.
 
 ### Settled live verification — 3 September 2026
 
-Aurent typed status run `33747323362` verified:
+Aurent typed status run `33749858549` verified after the PR #49 deployment:
 
+- deployed SHA: `f454e7fb64eb117278fcc8f1def1153d896cf39e`;
 - Hyperliquid forward runner: `healthy`;
 - Polymarket forward runner: `healthy`;
 - Solana forward runner: `healthy`;
@@ -45,9 +46,10 @@ Aurent typed status run `33747323362` verified:
 - Telegram alerts running;
 - M6H lifecycle research running;
 - all observed container restart counts: `0`;
+- persisted Telegram command menu still matches the safe 14-command list;
 - `SIGNER_ENABLED=false`.
 
-The post-fix read-only research snapshot run `33747246524`, captured at `2026-09-03T10:59:38Z`, reported all three forward studies operationally `ready` with no hard reasons or warnings:
+The post-alert read-only research snapshot run `33749917961`, captured at `2026-09-03T11:29:11Z`, reported all three forward studies operationally `ready` with no hard reasons or warnings:
 
 - Hyperliquid — `ready`;
 - Polymarket — `ready`;
@@ -58,12 +60,14 @@ It also reported:
 - simulated research capital: `$3,000` total across three independent `$1,000` paper/shadow studies;
 - current simulated NAV: `$3,000`;
 - closed trades: `0` at that capture time;
-- execution observations: `0` at that capture time;
+- open Hyperliquid positions: `0`;
+- open Solana positions: `0`;
+- execution observations: `0`;
 - permanent data-integrity incidents: `0`;
 - contaminated studies: `0`;
-- unresolved incidents: `6`, all historical non-data-integrity errors from provider/parser issues fixed earlier the same day.
+- unresolved incidents: `6`, all historical non-data-integrity provider/parser errors fixed earlier the same day.
 
-Do not interpret the historical incidents as current venue failures when readiness is fresh and `ready`.
+Do not interpret those historical incidents as current venue failures when readiness is fresh and `ready`.
 
 ## Product purpose and immutable current safety boundary
 
@@ -124,7 +128,7 @@ Edge Lab now uses the current keyset sort field:
 
 `order=liquidityNum`
 
-The fix and regression coverage are included in runtime revision `5f782b6c7cbc144774d9c9ec000b98bbab369c18`.
+The fix and regression coverage remain in the current runtime lineage.
 
 Current live state: `ready` / Docker `healthy`.
 
@@ -222,11 +226,11 @@ Current commands:
 
 ### Stale Kennysbot menu incident and final fix
 
-The owner's iPhone still displayed legacy commands such as `/sell`, `/sellall`, `/stop`, `/papermode`, `/golive`, `/confirm`, `/tp`, `/sl`, `/strict`, `/loose`, `/setbuysol`, `/pending`, `/approve`, and `/reject` even after the default Telegram menu had been corrected.
+The owner's iPhone previously displayed legacy commands such as `/sell`, `/sellall`, `/stop`, `/papermode`, `/golive`, `/confirm`, `/tp`, `/sl`, `/strict`, `/loose`, `/setbuysol`, `/pending`, `/approve`, and `/reject` after the default Telegram menu had been corrected.
 
 Root cause: Telegram persists command lists independently by BotCommandScope and language. Default-scope verification alone was insufficient.
 
-Runtime revision `5f782b6...` now writes the safe Edge Lab menu at Telegram worker startup to six variants:
+Runtime writes the safe Edge Lab menu at Telegram worker startup to six variants:
 
 1. default / generic language;
 2. default / English;
@@ -235,13 +239,65 @@ Runtime revision `5f782b6...` now writes the safe Edge Lab menu at Telegram work
 5. exact owner chat / generic;
 6. exact owner chat / English.
 
-One-time live API verification run `33747154288` queried all six variants after deployment. Every variant returned exactly the safe 14-command menu:
+One-time live API verification run `33747154288` queried all six variants. Every variant returned exactly the safe 14-command menu:
 
 - missing commands: none;
 - unexpected commands: none;
 - `all_scopes_ok=true`.
 
-Therefore if a mobile Telegram client still visually shows the legacy menu after this verification, treat it as client-side cached UI. Close/reopen the menu or chat/app before changing server code again.
+Settled post-PR #49 status run `33749858549` again verified the persisted safe menu and `telegram_menu_ok=true`.
+
+If a mobile Telegram client still visually shows the legacy menu after this verified server state, treat it as client-side cached UI before changing server code again.
+
+## Telegram paper/shadow trade alerts and daily heartbeat
+
+PR #49 merged as runtime revision:
+
+`f454e7fb64eb117278fcc8f1def1153d896cf39e`
+
+The owner-alert worker now sends durable Telegram notifications for research activity while preserving the no-live-capital boundary.
+
+### Paper/shadow open alerts
+
+- Hyperliquid: one alert per durable `HyperliquidCarryPosition` row;
+- Solana: one alert per accepted M6G entry execution with `phase=entry` and `status=open`;
+- rejected Solana candidates do not alert;
+- messages include venue/study/instrument, simulated allocation, entry details, timestamp/planned hold or close, and an explicit `PAPER/SHADOW ONLY` warning.
+
+Polymarket's current M6F structure is immediate/completion-style rather than a durable open position, so it does not fabricate an open-position notification.
+
+### Paper/shadow close/completion alerts
+
+Every immutable `ForwardTradeRecord` can produce one close/completion message containing:
+
+- venue/study/instrument;
+- simulated allocation;
+- net P&L in dollars and percent;
+- fees;
+- slippage/cost divergence;
+- hold duration;
+- exit/completion reason;
+- open/close timestamps;
+- explicit `PAPER/SHADOW ONLY` wording.
+
+Polymarket uses `TRADE COMPLETED`; held-position venues use `TRADE CLOSED`.
+
+### Idempotency
+
+Trade alert event keys derive from persisted database row IDs. A worker/container restart cannot legitimately create a second alert for the same persisted position/trade. The notification repository also rejects conflicting duplicate payloads.
+
+### Daily heartbeat
+
+Default heartbeat time:
+
+- `18:00 UTC`;
+- `19:00 Africa/Lagos`.
+
+Exactly one heartbeat event is keyed per UTC date. It reports active studies, per-study simulated NAV/closed-trade counts, open paper/shadow positions, aggregate simulated NAV, daily completed trades, and a clear `No paper/shadow trades closed today — studies remain active and watching for qualifying setups.` message when appropriate. It points the owner to `/research` for the detailed live readiness/evidence snapshot.
+
+Existing critical/data-integrity and evidence-state-change alerts remain enabled.
+
+Full repository verification for this feature passed in one-time run `33749291095`; temporary verification workflows were removed before merge. Deployment run `33749496652` completed successfully. Settled status run `33749858549` shows `edge-lab-telegram-alerts-1=0` restarts.
 
 ## Read-only research snapshot bridge
 
@@ -326,7 +382,7 @@ Cloudflare publication remains optional/outstanding; the dashboard is currently 
 
 ## Current runtime services
 
-Verified running after the final restart:
+Verified running after PR #49 deployment:
 
 - PostgreSQL;
 - Redis;
@@ -343,9 +399,9 @@ Verified running after the final restart:
 - read-only dashboard on `127.0.0.1:8080`;
 - private owner-control API on `127.0.0.1:8090`;
 - Telegram owner controls;
-- Telegram alerts.
+- Telegram owner alerts with trade lifecycle + daily heartbeat support.
 
-All observed restart counts were `0` in settled run `33747323362`.
+All observed restart counts were `0` in settled run `33749858549`.
 
 ## Core `/health` caveat
 
@@ -382,10 +438,14 @@ GitHub Actions is allowed only deliberately.
 Recent justified runs include:
 
 - `33746584336` — full repository verification for final Polymarket + Telegram scope fix;
-- `33746731801` — deploy final fix to VPS;
+- `33746731801` — deploy final Polymarket/menu fix;
 - `33747154288` — one-time exact Telegram scope verification;
 - `33747246524` — post-fix read-only research snapshot;
-- `33747323362` — settled status/restart-count verification.
+- `33747323362` — settled pre-alert status/restart-count verification;
+- `33749291095` — one-time full repository verification for paper trade + heartbeat alerts;
+- `33749496652` — deploy PR #49 runtime revision `f454e7f...`;
+- `33749858549` — settled post-alert status/restart-count verification;
+- `33749917961` — post-alert read-only research snapshot.
 
 ## Important continuation files
 
@@ -396,6 +456,8 @@ Read these before making changes:
 - `docs/OWNER_CONTROLS.md`;
 - `docs/MILESTONE6H_LIFECYCLE_RESEARCH.md`;
 - `app/research_snapshot.py`;
+- `app/notifications.py`;
+- `app/workers/owner_alerts.py`;
 - `app/dashboard_api.py`;
 - `app/telegram_control.py`;
 - `app/workers/telegram_controls.py`;
@@ -415,14 +477,15 @@ Aurent continuation files:
 
 ## Exact continuation target
 
-The infrastructure/provider blockers that prevented full research are now cleared. Do **not** resume by re-fixing Hyperliquid, Polymarket, Helius, or Telegram unless fresh evidence shows a regression.
+The infrastructure/provider and Telegram-observability blockers are cleared. Do **not** resume by re-fixing Hyperliquid, Polymarket, Helius/Alchemy, Telegram menu, or trade alerts unless fresh evidence shows a regression.
 
-Next work should be evidence-driven:
+Next work should proceed in parallel with uninterrupted evidence collection:
 
 1. Let the three paper/shadow studies and M6H lifecycle research accumulate real forward evidence.
-2. Use the typed `research-snapshot` operation when the owner asks for progress/review; compare fresh evidence with prior snapshots rather than manually querying unrelated tables.
-3. Investigate only fresh hard reasons, warnings, critical incidents, restart-count growth, or data-integrity failures.
-4. Once actual trades/execution observations appear, review fees, slippage, drawdown, realized net P&L, sample coverage, and strategy-vs-hold/lifecycle results.
-5. Do not relax GREEN evidence gates merely because time has passed. The strongest automated state remains recommendation-only.
-6. Later, publish the read-only dashboard behind Cloudflare Access and build the authenticated browser mutation adapter if the owner wants web control.
-7. Keep live trading/signing/fund movement out of scope until a separately authorized micro-live security milestone.
+2. Use Telegram trade-open/trade-close/completion alerts and the 19:00 Lagos heartbeat for passive owner awareness.
+3. Use the typed `research-snapshot` operation when the owner asks for progress/review; compare fresh evidence with prior snapshots rather than manually querying unrelated tables.
+4. Investigate only fresh hard reasons, warnings, critical incidents, restart-count growth, or data-integrity failures.
+5. Once actual trades/execution observations appear, review fees, slippage, drawdown, realized net P&L, sample coverage, and strategy-vs-hold/lifecycle results.
+6. Do not relax GREEN evidence gates merely because time has passed. The strongest automated state remains recommendation-only.
+7. The next build item is publishing the read-only dashboard behind owner-only Cloudflare Access; after that, add the authenticated browser mutation adapter if the owner wants web control.
+8. Keep live trading/signing/fund movement out of scope until a separately authorized micro-live security milestone.
