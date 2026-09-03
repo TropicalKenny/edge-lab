@@ -1,0 +1,70 @@
+name: Diagnose Hyperliquid Spot Shape
+
+on:
+  push:
+    branches:
+      - fix/hyperliquid-orphan-contexts
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect public spotMetaAndAssetCtxs shape
+        run: |
+          python3 - <<'PY'
+          import json
+          import urllib.request
+
+          req = urllib.request.Request(
+              'https://api.hyperliquid.xyz/info',
+              data=json.dumps({'type': 'spotMetaAndAssetCtxs'}).encode(),
+              headers={'Content-Type': 'application/json'},
+              method='POST',
+          )
+          with urllib.request.urlopen(req, timeout=20) as response:
+              payload = json.load(response)
+
+          meta, contexts = payload
+          universe = meta.get('universe', [])
+          tokens = meta.get('tokens', [])
+          by_token_index = {int(t['index']): t.get('name') for t in tokens if isinstance(t, dict) and 'index' in t}
+          idx71 = [m for m in universe if isinstance(m, dict) and str(m.get('index')) == '71']
+          ctx71 = [c for c in contexts if isinstance(c, dict) and c.get('coin') == '@71']
+          unknown = []
+          valid_ids = set()
+          for market in universe:
+              if not isinstance(market, dict):
+                  continue
+              name = str(market.get('name', ''))
+              if name:
+                  valid_ids.add(name)
+              try:
+                  valid_ids.add('@' + str(int(market['index'])))
+              except (KeyError, TypeError, ValueError):
+                  pass
+              ids = market.get('tokens')
+              if isinstance(ids, list) and len(ids) == 2:
+                  try:
+                      base = by_token_index.get(int(ids[0]))
+                      quote = by_token_index.get(int(ids[1]))
+                  except (TypeError, ValueError):
+                      base = quote = None
+                  if base and quote:
+                      valid_ids.add(f'{base}/{quote}')
+          for context in contexts:
+              if isinstance(context, dict):
+                  coin = str(context.get('coin', '')).strip()
+                  if coin and coin not in valid_ids:
+                      unknown.append(coin)
+
+          print('universe_count=', len(universe))
+          print('context_count=', len(contexts))
+          print('metadata_index_71=', json.dumps(idx71, sort_keys=True))
+          print('context_at_71_count=', len(ctx71))
+          print('unknown_context_count=', len(unknown))
+          print('unknown_context_sample=', json.dumps(unknown[:20]))
+          PY
