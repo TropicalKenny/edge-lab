@@ -36,10 +36,12 @@ def parse_spot_contexts(payload: Any, *, captured_at: datetime | None = None) ->
     """Parse spot contexts without assuming metadata and live contexts have equal length.
 
     Hyperliquid's current typed SDK exposes a `coin` identity on each spot context.
-    When present, that identity is authoritative and lets inactive metadata entries be
-    omitted from the context array without corrupting market alignment. Older response
-    shapes without `coin` retain the positional path, but only when lengths match.
-    Ambiguous, mixed, duplicate, or unknown identity mappings fail closed.
+    That wire identity can be the metadata name, a human token-pair alias, or the
+    documented `@{spot index}` form. When present it is authoritative and lets
+    inactive metadata entries be omitted from the context array without corrupting
+    market alignment. Older response shapes without `coin` retain the positional
+    path, but only when lengths match. Ambiguous, mixed, duplicate, or unknown
+    identity mappings fail closed.
     """
 
     captured_at = captured_at or datetime.now(timezone.utc)
@@ -72,6 +74,10 @@ def parse_spot_contexts(payload: Any, *, captured_at: datetime | None = None) ->
         if not book_coin:
             continue
         identities = {book_coin}
+        try:
+            identities.add(f"@{int(market['index'])}")
+        except (KeyError, TypeError, ValueError):
+            pass
         token_ids = market.get("tokens", [])
         if isinstance(token_ids, list) and len(token_ids) == 2:
             try:

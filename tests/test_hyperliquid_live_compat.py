@@ -19,7 +19,7 @@ META = {
     "universe": [
         {"name": "@107", "tokens": [150, 0], "index": 107},
         {"name": "@108", "tokens": [151, 0], "index": 108},
-        {"name": "HYPE/USDC", "tokens": [152, 0], "index": 109},
+        {"name": "HYPE/USDC", "tokens": [152, 0], "index": 71},
     ],
 }
 
@@ -48,6 +48,17 @@ def test_current_spot_context_identity_accepts_unique_human_pair_alias():
     assert len(spots) == 1
     assert spots[0].book_coin == "@107"
     assert spots[0].pair == "UBTC/USDC"
+
+
+def test_current_spot_context_identity_accepts_documented_at_index_wire_name():
+    payload = [
+        META,
+        [{"coin": "@71", "midPx": "52", "markPx": "52.1", "dayNtlVlm": "9000000"}],
+    ]
+    spots = parse_spot_contexts(payload, captured_at=NOW)
+    assert len(spots) == 1
+    assert spots[0].book_coin == "HYPE/USDC"
+    assert spots[0].pair == "HYPE/USDC"
 
 
 def test_legacy_unidentified_contexts_require_exact_positional_alignment():
