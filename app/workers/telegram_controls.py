@@ -24,6 +24,13 @@ async def run() -> None:
         poll_timeout_seconds=settings.telegram_control_poll_timeout_seconds,
         request_timeout_seconds=settings.telegram_timeout_seconds,
     ) as client:
+        try:
+            # Menu registration changes only Telegram's command hints. Failure must not
+            # take down the private owner-control worker.
+            await client.set_commands()
+        except Exception:
+            log.exception("Telegram command-menu registration failed")
+
         while True:
             try:
                 # Never hold a database transaction open while Telegram long-polls.
