@@ -5,7 +5,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
-from app.dashboard_server import app
+from app.dashboard_server import app, auth, settings
 from app.database import get_db
 from app.models import Base
 
@@ -27,7 +27,7 @@ def _session():
     return Session(engine)
 
 
-def test_hosted_asgi_exposes_dashboard_only_with_db_backed_health():
+def test_hosted_asgi_requires_owner_session_and_keeps_internal_routes_absent(monkeypatch):
     db = _session()
 
     def override_db():
@@ -49,6 +49,15 @@ def test_hosted_asgi_exposes_dashboard_only_with_db_backed_health():
             "signer_enabled": False,
             "live_capital_usd": 0,
         }
+        assert client.get("/login").status_code == 200
+        unauth = client.get("/dashboard", follow_redirects=False)
+        assert unauth.status_code == 303
+        assert unauth.headers["location"] == "/login"
+        assert client.get("/dashboard/api/summary").status_code == 401
+
+        monkeypatch.setattr(settings, "dashboard_auth_secret", "test-owner-session-secret")
+        token = auth.create_session()
+        client.cookies.set(auth.cookie_name, token)
         assert client.get("/dashboard").status_code == 200
         for path in (
             "/signer/status",
@@ -66,7 +75,7 @@ def test_hosted_asgi_exposes_dashboard_only_with_db_backed_health():
 
 
 def test_hosted_asgi_sets_strict_browser_headers():
-    response = TestClient(app).get("/dashboard")
+    response = TestClient(app).get("/login")
     assert response.status_code == 200
     assert response.headers["x-content-type-options"] == "nosniff"
     assert response.headers["x-frame-options"] == "DENY"
@@ -84,8 +93,8 @@ def test_hosted_asgi_sets_strict_browser_headers():
     assert "form-action 'none'" in csp
 
 
-def test_tunnel_compose_isolates_cloudflare_and_uses_exact_select_only_db_role():
-    text = (ROOT / "deploy" / "compose.dashboard-tunnel.yml").read_text()
+def test_local_dashboard_compose_is_loopback_only_and_select_only():
+    text = (ROOT / "deploy" / "compose.dashboard-local.yml").read_text()
     assert "CREATE ROLE edge_dashboard LOGIN PASSWORD" in text
     assert "default_transaction_read_only = on" in text
     assert "REVOKE ALL ON ALL TABLES IN SCHEMA public FROM edge_dashboard" in text
@@ -100,31 +109,20 @@ def test_tunnel_compose_isolates_cloudflare_and_uses_exact_select_only_db_role()
         "forward_study_incidents",
         "forward_trade_records",
         "forward_execution_records",
+        "forward_scan_observations",
     ):
         assert table in text
     assert "postgresql+psycopg://edge_dashboard:${DASHBOARD_DB_PASSWORD}@postgres:5432/edge" in text
     assert "app.dashboard_server:app" in text
-    assert "TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?set CLOUDFLARE_TUNNEL_TOKEN}" in text
-    assert text.count("ports: []") >= 2
-    assert "dashboard_edge:" in text
+    assert '"127.0.0.1:8080:8080"' in text
+    assert "DASHBOARD_AUTH_SECRET" in text
+    assert "DASHBOARD_RESEND_API_KEY" in text
+    assert "DASHBOARD_AUTH_FROM_EMAIL" in text
     assert "cap_drop: [ALL]" in text
     assert "no-new-privileges:true" in text
     assert "JUPITER_API_KEY" not in text
     assert "HELIUS_API_KEY" not in text
     assert "GOPLUS_ACCESS_TOKEN" not in text
-    command = _line_with(text, 'command: ["tunnel"')
-    assert "--token" not in command
-
-
-def test_launchers_enforce_preflight_and_dashboard_only_origin():
-    dashboard = (ROOT / "deploy" / "start-dashboard-tunnel.sh").read_text()
-    forward = (ROOT / "deploy" / "start-forward.sh").read_text()
-    assert "sh deploy/preflight-forward.sh" in dashboard
-    assert "sh deploy/preflight-forward.sh --research-only" in forward
-    assert "export SIGNER_ENABLED=false" in dashboard
-    assert "dashboard-db-role dashboard cloudflared" in dashboard
-    assert "http://dashboard:8080" in dashboard
-    assert "http://api:8000" not in dashboard
 
 
 def test_hardened_forward_network_exposes_only_internal_api_loopback():
@@ -136,23 +134,25 @@ def test_hardened_forward_network_exposes_only_internal_api_loopback():
     assert "ports: []" in redis
 
 
-def test_dashboard_hosting_runbook_routes_public_hostname_to_dashboard_service():
+def test_dashboard_runbook_matches_shared_vps_hosting_and_exact_port():
     text = (ROOT / "docs" / "DASHBOARD_V1.md").read_text()
-    assert "Create the Cloudflare Access application before publishing the tunnel hostname" in text
-    assert "owner-only Allow policy" in text
-    assert "Protect with Access" in text
-    assert "http://dashboard:8080" in text
-    assert "Do not point the tunnel at `api:8000`" in text
+    assert "Edge Lab is hosted on the VPS" in text
+    assert "Authentication belongs to Edge Lab, not Cloudflare Access" in text
+    assert "127.0.0.1:8080" in text
+    assert "Never route the public dashboard hostname to `8000` or `8090`" in text
     assert "edge_dashboard" in text
-    assert "exact Dashboard V1 table allowlist" in text
-    assert "future tables" in text.lower()
     assert "SELECT-only" in text
+    assert "DASHBOARD_AUTH_SECRET" in text
+    assert "DASHBOARD_RESEND_API_KEY" in text
 
 
-def test_example_env_contains_blank_hosting_secrets():
+def test_example_env_contains_blank_dashboard_secrets():
     text = (ROOT / "deploy" / ".env.forward.example").read_text()
-    assert _line_with(text, "CLOUDFLARE_TUNNEL_TOKEN=") == "CLOUDFLARE_TUNNEL_TOKEN="
     assert _line_with(text, "DASHBOARD_DB_PASSWORD=") == "DASHBOARD_DB_PASSWORD="
+    assert _line_with(text, "DASHBOARD_AUTH_SECRET=") == "DASHBOARD_AUTH_SECRET="
+    assert _line_with(text, "DASHBOARD_RESEND_API_KEY=") == "DASHBOARD_RESEND_API_KEY="
+    assert _line_with(text, "DASHBOARD_AUTH_FROM_EMAIL=") == "DASHBOARD_AUTH_FROM_EMAIL="
+    assert _line_with(text, "DASHBOARD_OWNER_EMAIL=") == "DASHBOARD_OWNER_EMAIL=fafikennedy20@gmail.com"
 
 
 def test_scan_telemetry_table_is_explicitly_granted_to_reader_roles():

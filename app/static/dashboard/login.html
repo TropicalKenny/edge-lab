@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex,nofollow,noarchive" />
+  <title>Edge Lab · Owner sign in</title>
+  <link rel="stylesheet" href="/auth/assets/login.css" />
+  <script defer src="/auth/assets/login.js"></script>
+</head>
+<body>
+  <main class="shell">
+    <section class="card" aria-labelledby="title">
+      <p class="eyebrow">EDGE LAB</p>
+      <h1 id="title">Owner sign in</h1>
+      <p class="lede">A one-time code will be sent to the approved owner email. No password is stored.</p>
+
+      <button id="send-code" class="primary" type="button">Send one-time code</button>
+
+      <form id="verify-form" hidden>
+        <label for="code">6-digit code</label>
+        <input id="code" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" required />
+        <button class="primary" type="submit">Verify and open dashboard</button>
+      </form>
+
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+      <p class="safety">Research-only dashboard · no wallet · no signing · no live capital</p>
+    </section>
+  </main>
+</body>
+</html>

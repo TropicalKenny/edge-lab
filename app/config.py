@@ -130,6 +130,14 @@ class Settings(BaseSettings):
     forward_evaluation_poll_seconds: int = 3600
     forward_status_max_market_age_seconds: int = 900
     owner_control_api_token: str = ''
+    dashboard_owner_email: str = 'fafikennedy20@gmail.com'
+    dashboard_auth_secret: str = ''
+    dashboard_resend_api_key: str = ''
+    dashboard_auth_from_email: str = ''
+    dashboard_otp_ttl_seconds: int = 600
+    dashboard_otp_cooldown_seconds: int = 60
+    dashboard_otp_max_attempts: int = 5
+    dashboard_session_ttl_seconds: int = 43200
     telegram_bot_token: str = ''
     telegram_chat_id: str = ''
     telegram_owner_user_id: str = ''
