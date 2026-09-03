@@ -27,7 +27,7 @@ async def run() -> None:
         try:
             # Menu registration changes only Telegram's command hints. Failure must not
             # take down the private owner-control worker.
-            await client.set_commands()
+            await client.set_commands(chat_id=router.chat_id)
         except Exception:
             log.exception("Telegram command-menu registration failed")
 

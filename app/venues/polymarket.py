@@ -234,7 +234,7 @@ class PolymarketPublicClient:
         params: dict[str, Any] = {
             "limit": limit,
             "closed": str(closed).lower(),
-            "order": "liquidity_num",
+            "order": "liquidityNum",
             "ascending": "false",
         }
         if after_cursor:
