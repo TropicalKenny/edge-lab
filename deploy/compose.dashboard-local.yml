@@ -30,7 +30,10 @@ services:
           forward_nav_observations,
           forward_study_incidents,
           forward_trade_records,
-          forward_execution_records
+          forward_execution_records,
+          hyperliquid_carry_positions,
+          hyperliquid_perp_snapshots,
+          hyperliquid_funding_snapshots
         TO edge_dashboard;
         SQL
     depends_on:
