@@ -138,7 +138,10 @@ class OwnerControlService:
             select(OwnerCommand).where(OwnerCommand.idempotency_key == idempotency_key)
         )
         if existing is not None:
-            return cls._existing_result(existing)
+            result = cls._existing_result(existing)
+            if result.status == "rejected":
+                raise OwnerControlError(str(result.outcome.get("error") or "command was rejected"))
+            return result
 
         target_type = "incident" if command.startswith("incident_") else "study"
         audit = OwnerCommand(
