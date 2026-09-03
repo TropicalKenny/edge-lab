@@ -119,6 +119,18 @@ def build_research_snapshot(
     studies: list[dict[str, Any]] = []
     for row in dashboard.get("studies") or []:
         study_id = str(row.get("study_id"))
+        baseline_activity = scan_activity_summary(
+            db,
+            study_id=study_id,
+            now=captured_at,
+            exclude_research_lanes=("m6j",),
+        )
+        m6j_activity = scan_activity_summary(
+            db,
+            study_id=study_id,
+            now=captured_at,
+            research_lane="m6j",
+        )
         studies.append(
             {
                 "study_id": study_id,
@@ -144,7 +156,8 @@ def build_research_snapshot(
                 "contaminated": bool(row.get("contaminated")),
                 "latest_evaluation": _compact_evaluation(row.get("latest_evaluation")),
                 "operational": _compact_operational(operational.get(study_id)),
-                "activity": scan_activity_summary(db, study_id=study_id, now=captured_at),
+                "activity": baseline_activity,
+                "research_acceleration": m6j_activity,
             }
         )
 
@@ -264,7 +277,7 @@ def render_research_snapshot_text(snapshot: dict[str, Any]) -> str:
         activity = row.get("activity") or {}
         if activity.get("tracking"):
             lines.append(
-                "Activity 24h: "
+                "Baseline activity 24h: "
                 f"scans {activity.get('cycles', 0)} | "
                 f"examined {activity.get('examined', 0)} | "
                 f"passed {activity.get('accepted', 0)} | "
@@ -274,14 +287,14 @@ def render_research_snapshot_text(snapshot: dict[str, Any]) -> str:
             venue = str(row.get("venue") or "").lower()
             if venue == "solana" and meta:
                 lines.append(
-                    "Scan detail: "
+                    "Baseline scan detail: "
                     f"launch-window observations {meta.get('launches_in_window', 0)} | "
                     f"decision features {meta.get('features_ready', 0)} | "
                     f"quote attempts {meta.get('quote_attempts', 0)}"
                 )
             elif venue == "polymarket" and meta:
                 lines.append(
-                    "Scan detail: "
+                    "Baseline scan detail: "
                     f"markets discovered {meta.get('markets_discovered', 0)} | "
                     f"validated {meta.get('markets_validated', 0)} | "
                     f"structural candidates {meta.get('structural_candidates', 0)}"
@@ -289,12 +302,45 @@ def render_research_snapshot_text(snapshot: dict[str, Any]) -> str:
             top = activity.get("top_rejection_reasons") or []
             if top:
                 lines.append(
-                    "Top rejects: " + "; ".join(
+                    "Baseline top rejects: " + "; ".join(
                         f"{item.get('reason')} {item.get('count')}" for item in top[:5]
                     )
                 )
         else:
-            lines.append("Activity: tracking enabled; waiting for first completed scan")
+            lines.append("Baseline activity: tracking enabled; waiting for first completed scan")
+
+        m6j = row.get("research_acceleration") or {}
+        if m6j.get("tracking"):
+            lines.append(
+                "M6J research 24h: "
+                f"cycles {m6j.get('cycles', 0)} | "
+                f"examined {m6j.get('examined', 0)} | "
+                f"positive/quoted {m6j.get('accepted', 0)} | "
+                f"rejected/unsafe {m6j.get('rejected', 0)}"
+            )
+            m6j_meta = m6j.get("metadata_totals") or {}
+            venue = str(row.get("venue") or "").lower()
+            if venue == "hyperliquid":
+                lines.append(
+                    "M6J detail: "
+                    f"horizon tests {m6j_meta.get('m6j_candidates_examined', 0)} | "
+                    f"positive edge {m6j_meta.get('m6j_positive_edge_candidates', 0)}"
+                )
+            elif venue == "polymarket":
+                lines.append(
+                    "M6J detail: "
+                    f"WS messages {m6j_meta.get('m6j_ws_messages', 0)} | "
+                    f"book events {m6j_meta.get('m6j_book_events', 0)} | "
+                    f"positive edge events {m6j_meta.get('m6j_positive_edge_events', 0)}"
+                )
+            elif venue == "solana":
+                lines.append(
+                    "M6J detail: "
+                    f"unknown {m6j_meta.get('m6j_unknown_candidates', 0)} | "
+                    f"unsafe {m6j_meta.get('m6j_unsafe_candidates', 0)} | "
+                    f"quote attempts {m6j_meta.get('m6j_counterfactual_quote_attempts', 0)} | "
+                    f"outcomes {m6j_meta.get('m6j_counterfactual_outcomes', 0)}"
+                )
         hard = op.get("hard_reasons") or []
         warnings = op.get("warnings") or []
         if hard:
