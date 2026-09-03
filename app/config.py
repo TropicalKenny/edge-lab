@@ -125,6 +125,7 @@ class Settings(BaseSettings):
     telegram_alert_retry_base_seconds: int = 60
     telegram_alert_retry_max_seconds: int = 3600
     telegram_alert_batch_size: int = 20
+    telegram_heartbeat_hour_utc: int = 18
 
 @lru_cache
 def get_settings() -> Settings:

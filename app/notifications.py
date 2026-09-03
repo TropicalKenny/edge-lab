@@ -11,7 +11,14 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.evaluation_models import StrategyEvaluationRun
-from app.forward_models import ForwardStudy, ForwardStudyIncident
+from app.forward_models import (
+    ForwardExecutionRecord,
+    ForwardNavObservation,
+    ForwardStudy,
+    ForwardStudyIncident,
+    ForwardTradeRecord,
+)
+from app.hyperliquid_forward_models import HyperliquidCarryPosition
 from app.notification_models import NotificationDelivery
 
 CHANNEL_TELEGRAM = "telegram"
@@ -40,6 +47,38 @@ def _json(value: Any) -> str:
 
 def _money(value: Decimal) -> str:
     return f"${Decimal(value):,.2f}"
+
+
+def _decimal(value: Any, default: Decimal = ZERO) -> Decimal:
+    if value is None:
+        return default
+    try:
+        return Decimal(str(value))
+    except (ArithmeticError, ValueError):
+        return default
+
+
+def _metadata(raw: str | None) -> dict[str, Any]:
+    if not raw:
+        return {}
+    try:
+        value = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def _duration_text(opened_at: datetime, closed_at: datetime) -> str:
+    seconds = max(0, int((_aware(closed_at) - _aware(opened_at)).total_seconds()))
+    hours, remainder = divmod(seconds, 3600)
+    minutes = remainder // 60
+    if hours:
+        return f"{hours}h {minutes}m"
+    return f"{minutes}m"
+
+
+def _study_label(study: ForwardStudy | None, fallback: str) -> str:
+    return study.external_id if study is not None else fallback
 
 
 @dataclass(frozen=True)
@@ -155,7 +194,7 @@ class AlertEventCollector:
         events: list[NotificationEvent] = []
         for incident in incidents:
             study = db.get(ForwardStudy, incident.study_id)
-            study_name = study.external_id if study is not None else incident.study_id
+            study_name = _study_label(study, incident.study_id)
             integrity = "DATA INTEGRITY" if incident.data_integrity else "CRITICAL"
             text = (
                 f"EDGE LAB — {integrity}\n"
@@ -233,9 +272,309 @@ class AlertEventCollector:
             )
         return events
 
+    @staticmethod
+    def trade_events(db: Session) -> list[NotificationEvent]:
+        """Return immutable paper/shadow trade lifecycle events.
+
+        Hyperliquid has a durable position row, Solana has a durable accepted-entry
+        execution row, and all venues create a ForwardTradeRecord when a simulated
+        trade is complete. Event keys are tied to those persisted row ids so worker
+        restarts cannot duplicate an alert.
+        """
+
+        events: list[NotificationEvent] = []
+
+        positions = list(
+            db.scalars(
+                select(HyperliquidCarryPosition).order_by(HyperliquidCarryPosition.opened_at.asc())
+            ).all()
+        )
+        for position in positions:
+            study = db.get(ForwardStudy, position.study_id)
+            study_name = _study_label(study, position.study_id)
+            entry_cost = Decimal(position.entry_spot_fee_usd) + Decimal(position.entry_perp_fee_usd)
+            text = (
+                "EDGE LAB — PAPER/SHADOW TRADE OPENED\n"
+                "Venue: Hyperliquid\n"
+                f"Study: {study_name}\n"
+                f"Instrument: {position.coin} funding/carry\n"
+                f"Simulated allocation: {_money(position.allocated_capital_usd)}\n"
+                f"Spot entry: {Decimal(position.entry_spot_price):f}\n"
+                f"Perp entry: {Decimal(position.entry_perp_price):f}\n"
+                f"Entry fees: {_money(entry_cost)}\n"
+                f"Opened: {_aware(position.opened_at).isoformat()}\n"
+                f"Planned close: {_aware(position.target_close_at).isoformat()}\n"
+                "PAPER/SHADOW ONLY — no real money, wallet, signing or live order was used."
+            )
+            events.append(
+                NotificationEvent(
+                    event_key=f"trade-open:hyperliquid:{position.id}",
+                    event_type="paper_trade_open",
+                    severity="info",
+                    text=text,
+                    metadata={
+                        "venue": "hyperliquid",
+                        "study_id": position.study_id,
+                        "position_id": position.id,
+                        "instrument": position.coin,
+                        "opened_at": _aware(position.opened_at).isoformat(),
+                    },
+                )
+            )
+
+        solana_entries = list(
+            db.scalars(
+                select(ForwardExecutionRecord)
+                .where(ForwardExecutionRecord.external_key.like("solana-entry:%"))
+                .order_by(ForwardExecutionRecord.observed_at.asc())
+            ).all()
+        )
+        for execution in solana_entries:
+            meta = _metadata(execution.metadata_json)
+            if meta.get("phase") != "entry" or meta.get("status") != "open":
+                continue
+            study = db.get(ForwardStudy, execution.study_id)
+            study_name = _study_label(study, execution.study_id)
+            mint = str(meta.get("mint") or (study.instrument if study is not None else "unknown"))
+            allocated = _decimal(meta.get("allocated_capital_usd"), Decimal(execution.shadow_cost_usd))
+            entry_price = execution.shadow_average_price or execution.paper_average_price
+            price_text = f"{Decimal(entry_price):f}" if entry_price is not None else "n/a"
+            text = (
+                "EDGE LAB — PAPER/SHADOW TRADE OPENED\n"
+                "Venue: Solana\n"
+                f"Study: {study_name}\n"
+                f"Asset: {mint}\n"
+                f"Simulated allocation: {_money(allocated)}\n"
+                f"Shadow entry price: {price_text}\n"
+                f"Opened: {meta.get('opened_at') or _aware(execution.observed_at).isoformat()}\n"
+                f"Planned hold until: {meta.get('hold_until') or 'n/a'}\n"
+                "Entry reason: frozen M6G safety/exitability rules passed.\n"
+                "PAPER/SHADOW ONLY — no real money, wallet, signing or live order was used."
+            )
+            events.append(
+                NotificationEvent(
+                    event_key=f"trade-open:solana:{execution.id}",
+                    event_type="paper_trade_open",
+                    severity="info",
+                    text=text,
+                    metadata={
+                        "venue": "solana",
+                        "study_id": execution.study_id,
+                        "execution_id": execution.id,
+                        "mint": mint,
+                        "opened_at": meta.get("opened_at") or _aware(execution.observed_at).isoformat(),
+                    },
+                )
+            )
+
+        trades = list(
+            db.scalars(select(ForwardTradeRecord).order_by(ForwardTradeRecord.closed_at.asc())).all()
+        )
+        for trade in trades:
+            study = db.get(ForwardStudy, trade.study_id)
+            study_name = _study_label(study, trade.study_id)
+            venue = study.venue if study is not None else "unknown"
+            instrument = study.instrument if study is not None else "unknown"
+            meta = _metadata(trade.metadata_json)
+            close_reason = str(
+                meta.get("close_reason")
+                or meta.get("exit_reason")
+                or meta.get("reason")
+                or "strategy exit/completion"
+            )
+            if venue == "hyperliquid":
+                position = db.scalar(
+                    select(HyperliquidCarryPosition).where(
+                        HyperliquidCarryPosition.trade_record_id == trade.id
+                    )
+                )
+                if position is not None:
+                    instrument = f"{position.coin} funding/carry"
+                    close_reason = position.close_reason or close_reason
+            elif venue == "solana":
+                instrument = str(meta.get("mint") or instrument)
+            elif venue == "polymarket":
+                instrument = str(meta.get("kind") or meta.get("opportunity_kind") or instrument)
+
+            allocated = Decimal(trade.allocated_capital_usd)
+            net = Decimal(trade.net_pnl_usd)
+            return_pct = (net / allocated * Decimal("100")) if allocated > ZERO else ZERO
+            title = "TRADE COMPLETED" if venue == "polymarket" else "TRADE CLOSED"
+            text = (
+                f"EDGE LAB — PAPER/SHADOW {title}\n"
+                f"Venue: {venue.title()}\n"
+                f"Study: {study_name}\n"
+                f"Instrument: {instrument}\n"
+                f"Simulated allocation: {_money(allocated)}\n"
+                f"Net P&L: {_money(net)} ({return_pct:.2f}%)\n"
+                f"Fees: {_money(trade.fees_usd)}\n"
+                f"Slippage/cost divergence: {_money(trade.slippage_usd)}\n"
+                f"Held: {_duration_text(trade.opened_at, trade.closed_at)}\n"
+                f"Exit reason: {close_reason}\n"
+                f"Opened: {_aware(trade.opened_at).isoformat()}\n"
+                f"Closed: {_aware(trade.closed_at).isoformat()}\n"
+                "PAPER/SHADOW ONLY — no real money, wallet, signing or live order was used."
+            )
+            events.append(
+                NotificationEvent(
+                    event_key=f"trade-close:{trade.id}",
+                    event_type="paper_trade_close",
+                    severity="info" if net >= ZERO else "warning",
+                    text=text,
+                    metadata={
+                        "venue": venue,
+                        "study_id": trade.study_id,
+                        "trade_id": trade.id,
+                        "net_pnl_usd": str(net),
+                        "closed_at": _aware(trade.closed_at).isoformat(),
+                    },
+                )
+            )
+
+        return events
+
+    @staticmethod
+    def _solana_open_count(db: Session) -> int:
+        count = 0
+        rows = list(
+            db.scalars(
+                select(ForwardExecutionRecord).where(
+                    ForwardExecutionRecord.external_key.like("solana-entry:%")
+                )
+            ).all()
+        )
+        for row in rows:
+            meta = _metadata(row.metadata_json)
+            if meta.get("status") != "open":
+                continue
+            signature = row.external_key.removeprefix("solana-entry:")
+            closed = db.scalar(
+                select(ForwardTradeRecord.id).where(
+                    ForwardTradeRecord.study_id == row.study_id,
+                    ForwardTradeRecord.external_key == f"solana-trade:{signature}",
+                )
+            )
+            if closed is None:
+                count += 1
+        return count
+
     @classmethod
-    def collect(cls, db: Session) -> list[NotificationEvent]:
-        return cls.incident_events(db) + cls.evaluation_events(db)
+    def heartbeat_events(
+        cls,
+        db: Session,
+        *,
+        now: datetime,
+        heartbeat_hour_utc: int = 18,
+    ) -> list[NotificationEvent]:
+        now = _aware(now)
+        if heartbeat_hour_utc < 0 or heartbeat_hour_utc > 23:
+            raise ValueError("heartbeat_hour_utc must be between 0 and 23")
+        if now.hour < heartbeat_hour_utc:
+            return []
+
+        event_key = f"daily-heartbeat:{now.date().isoformat()}"
+        if db.scalar(
+            select(NotificationDelivery.id).where(
+                NotificationDelivery.channel == CHANNEL_TELEGRAM,
+                NotificationDelivery.event_key == event_key,
+            )
+        ) is not None:
+            return []
+
+        studies = list(
+            db.scalars(
+                select(ForwardStudy)
+                .where(ForwardStudy.status == "active")
+                .order_by(ForwardStudy.venue.asc(), ForwardStudy.external_id.asc())
+            ).all()
+        )
+        latest_nav_total = ZERO
+        lines: list[str] = []
+        for study in studies:
+            nav = db.scalar(
+                select(ForwardNavObservation)
+                .where(ForwardNavObservation.study_id == study.id)
+                .order_by(ForwardNavObservation.observed_at.desc())
+                .limit(1)
+            )
+            nav_value = Decimal(nav.nav_usd) if nav is not None else Decimal(study.initial_capital_usd)
+            latest_nav_total += nav_value
+            trade_count = len(
+                list(
+                    db.scalars(
+                        select(ForwardTradeRecord.id).where(ForwardTradeRecord.study_id == study.id)
+                    ).all()
+                )
+            )
+            lines.append(f"- {study.venue.title()}: active | NAV {_money(nav_value)} | closed trades {trade_count}")
+
+        start = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
+        trades_today = len(
+            list(
+                db.scalars(
+                    select(ForwardTradeRecord.id).where(ForwardTradeRecord.closed_at >= start)
+                ).all()
+            )
+        )
+        hl_open = len(
+            list(
+                db.scalars(
+                    select(HyperliquidCarryPosition.id).where(
+                        HyperliquidCarryPosition.status == "open"
+                    )
+                ).all()
+            )
+        )
+        solana_open = cls._solana_open_count(db)
+        open_positions = hl_open + solana_open
+        no_trade_note = (
+            "No paper/shadow trades closed today — studies remain active and watching for qualifying setups."
+            if trades_today == 0
+            else f"Paper/shadow trades closed today: {trades_today}."
+        )
+        text = (
+            "EDGE LAB — DAILY RESEARCH HEARTBEAT\n"
+            f"Date (UTC): {now.date().isoformat()}\n"
+            f"Active studies: {len(studies)}\n"
+            + "\n".join(lines)
+            + ("\n" if lines else "")
+            + f"Open paper/shadow positions: {open_positions}\n"
+            + f"Combined simulated NAV: {_money(latest_nav_total)}\n"
+            + no_trade_note
+            + "\nUse /research for the full live readiness/evidence snapshot.\n"
+            + "PAPER/SHADOW ONLY — live capital remains disabled."
+        )
+        return [
+            NotificationEvent(
+                event_key=event_key,
+                event_type="daily_research_heartbeat",
+                severity="info",
+                text=text,
+                metadata={
+                    "date": now.date().isoformat(),
+                    "active_studies": len(studies),
+                    "open_positions": open_positions,
+                    "trades_today": trades_today,
+                    "simulated_nav_usd": str(latest_nav_total),
+                },
+            )
+        ]
+
+    @classmethod
+    def collect(
+        cls,
+        db: Session,
+        *,
+        now: datetime | None = None,
+        heartbeat_hour_utc: int = 18,
+    ) -> list[NotificationEvent]:
+        now = _aware(now or datetime.now(timezone.utc))
+        return (
+            cls.incident_events(db)
+            + cls.evaluation_events(db)
+            + cls.trade_events(db)
+            + cls.heartbeat_events(db, now=now, heartbeat_hour_utc=heartbeat_hour_utc)
+        )
 
 
 class TelegramSender:
@@ -288,9 +627,19 @@ class TelegramSender:
 
 class NotificationDispatcher:
     @staticmethod
-    def queue_current_events(db: Session, *, now: datetime | None = None) -> int:
+    def queue_current_events(
+        db: Session,
+        *,
+        now: datetime | None = None,
+        heartbeat_hour_utc: int = 18,
+    ) -> int:
+        now = _aware(now or datetime.now(timezone.utc))
         queued = 0
-        for event in AlertEventCollector.collect(db):
+        for event in AlertEventCollector.collect(
+            db,
+            now=now,
+            heartbeat_hour_utc=heartbeat_hour_utc,
+        ):
             before = db.scalar(
                 select(NotificationDelivery.id).where(
                     NotificationDelivery.channel == CHANNEL_TELEGRAM,

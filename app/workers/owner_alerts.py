@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import datetime, timezone
 
 from app.config import get_settings
 from app.database import get_session_factory
@@ -18,7 +19,12 @@ async def run_cycle() -> tuple[int, int, int]:
     SessionLocal = get_session_factory()
     db = SessionLocal()
     try:
-        queued = NotificationDispatcher.queue_current_events(db)
+        now = datetime.now(timezone.utc)
+        queued = NotificationDispatcher.queue_current_events(
+            db,
+            now=now,
+            heartbeat_hour_utc=settings.telegram_heartbeat_hour_utc,
+        )
         async with TelegramSender(
             bot_token=settings.telegram_bot_token,
             chat_id=settings.telegram_chat_id,
@@ -27,6 +33,7 @@ async def run_cycle() -> tuple[int, int, int]:
             sent, failed = await NotificationDispatcher.dispatch_due(
                 db,
                 sender=sender,
+                now=now,
                 max_attempts=settings.telegram_alert_max_attempts,
                 retry_base_seconds=settings.telegram_alert_retry_base_seconds,
                 retry_max_seconds=settings.telegram_alert_retry_max_seconds,
