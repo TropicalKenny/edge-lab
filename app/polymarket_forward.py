@@ -25,6 +25,7 @@ from app.forward_research import ForwardResearchError, ForwardResearchService
 from app.models import Experiment, Strategy, StrategyStatus, StrategyVersion
 from app.polymarket_research import PolymarketResearchService
 from app.services import HealthRegistry
+from app.scan_telemetry import record_scan_observation
 from app.venues.polymarket import (
     LegExecution,
     MarketContext,
@@ -422,18 +423,58 @@ class PolymarketStructuralForwardRunner:
         if study.status != "active" or study.venue != "polymarket" or study.instrument != INSTRUMENT:
             raise PolymarketForwardError("study is not an active Polymarket structural study")
         config = PolymarketForwardConfig.from_study(study)
-        candidates = await self._discover_candidates(config)
+        discovery_result = await self._discover_candidates(config)
+        if (
+            isinstance(discovery_result, tuple)
+            and len(discovery_result) == 2
+            and isinstance(discovery_result[1], dict)
+        ):
+            candidates, discovery_meta = discovery_result
+        else:
+            candidates = discovery_result
+            discovery_meta = {
+                "markets_discovered": 0,
+                "markets_validated": 0,
+                "structural_candidates": len(candidates),
+            }
         attempts = 0
         trades = 0
+        examined = 0
+        accepted = 0
+        rejected = 0
+        deferred = 0
+        rejection_reasons: dict[str, int] = {}
+
+        def reject(reason: str) -> None:
+            nonlocal rejected
+            rejected += 1
+            rejection_reasons[reason] = rejection_reasons.get(reason, 0) + 1
         for candidate in candidates:
             if attempts >= config.max_attempts_per_cycle:
                 break
-            if not self._signal_passes_cost_reserve(candidate.opportunity, config):
-                continue
             attempt_key = self._attempt_key(candidate, config)
+            candidate_key = f"pm-candidate:{attempt_key}"
             if self._attempt_exists(db, study.id, attempt_key):
+                deferred += 1
+                continue
+            examined += 1
+            if not self._signal_passes_cost_reserve(candidate.opportunity, config):
+                reason = "SIGNAL_EDGE_AFTER_OPERATION_RESERVE_BELOW_THRESHOLD"
+                reject(reason)
+                record_scan_observation(
+                    db, study_id=study.id, external_key=candidate_key, observation_kind="candidate",
+                    observed_at=_aware(candidate.opportunity.captured_at), examined_count=1, rejected_count=1,
+                    rejection_reasons={reason: 1}, metadata={"kind": candidate.opportunity.kind, "stage": "signal_cost"},
+                )
                 continue
             if self._required_capital(candidate.opportunity, config) > self._flat_equity(db, study):
+                reason = "SIMULATED_EQUITY_INSUFFICIENT"
+                reject(reason)
+                record_scan_observation(
+                    db, study_id=study.id, external_key=candidate_key, observation_kind="candidate",
+                    observed_at=_aware(candidate.opportunity.captured_at), examined_count=1, rejected_count=1,
+                    rejection_reasons={reason: 1}, metadata={"kind": candidate.opportunity.kind, "stage": "capital"},
+                )
                 continue
             attempts += 1
             if config.shadow_delay_ms:
@@ -442,7 +483,29 @@ class PolymarketStructuralForwardRunner:
             traded = self._persist_attempt(db, study, candidate, shadow, config, attempt_key)
             if traded:
                 trades += 1
+                accepted += 1
+                record_scan_observation(
+                    db, study_id=study.id, external_key=candidate_key, observation_kind="candidate",
+                    observed_at=max((row.observed_at for row in shadow), default=now),
+                    examined_count=1, accepted_count=1,
+                    metadata={"kind": candidate.opportunity.kind, "stage": "delayed_execution", "status": "completed"},
+                )
+            else:
+                reason = next((row.reason for row in shadow if row.reason), None) or "SHADOW_EDGE_OR_COST_GATE_FAILED"
+                reject(reason)
+                record_scan_observation(
+                    db, study_id=study.id, external_key=candidate_key, observation_kind="candidate",
+                    observed_at=max((row.observed_at for row in shadow), default=now),
+                    examined_count=1, rejected_count=1, rejection_reasons={reason: 1},
+                    metadata={"kind": candidate.opportunity.kind, "stage": "delayed_execution"},
+                )
 
+        record_scan_observation(
+            db, study_id=study.id,
+            external_key=f"polymarket-cycle:{int(_aware(now).timestamp() // 60)}",
+            observation_kind="cycle", observed_at=now, deferred_count=deferred,
+            metadata={**discovery_meta, "attempts": attempts, "trades": trades},
+        )
         self._record_hourly_flat_nav(db, study)
         self.health.set(
             "polymarket_forward",
@@ -452,11 +515,12 @@ class PolymarketStructuralForwardRunner:
         action = "traded" if trades else ("observed" if attempts else "no_entry")
         return ForwardTick(study.id, action, f"candidates={len(candidates)} attempts={attempts} trades={trades}")
 
-    async def _discover_candidates(self, config: PolymarketForwardConfig) -> list[StructuralCandidate]:
+    async def _discover_candidates(self, config: PolymarketForwardConfig) -> tuple[list[StructuralCandidate], dict[str, int]]:
         analyzer = config.analyzer()
         research = PolymarketResearchService(client=self.client, health=self.health, analyzer=analyzer)
         discovered = await research.discover_markets(max_markets=config.max_markets)
         markets, _ = await research._validate_markets(discovered)
+        discovery_meta = {"markets_discovered": len(discovered), "markets_validated": len(markets)}
         if not markets:
             raise PolymarketForwardError("no Polymarket markets passed current CLOB metadata validation")
 
@@ -502,7 +566,9 @@ class PolymarketStructuralForwardRunner:
                 if opportunity.kind == "negrisk_no_complete_set" and opportunity.eligible:
                     candidates.append(StructuralCandidate(opportunity, market_map))
 
-        return sorted(candidates, key=lambda row: row.opportunity.net_profit, reverse=True)
+        sorted_candidates = sorted(candidates, key=lambda row: row.opportunity.net_profit, reverse=True)
+        discovery_meta["structural_candidates"] = len(sorted_candidates)
+        return sorted_candidates, discovery_meta
 
     async def _shadow_reprice(
         self,

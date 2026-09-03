@@ -59,6 +59,7 @@ def test_snapshot_reader_roles_receive_only_specific_required_hyperliquid_tables
         ROOT / "deploy" / "compose.controls.yml",
     ]
     required = {
+        "forward_scan_observations",
         "hyperliquid_carry_positions",
         "hyperliquid_perp_snapshots",
         "hyperliquid_funding_snapshots",

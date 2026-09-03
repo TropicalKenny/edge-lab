@@ -1,0 +1,16 @@
+fastapi<1,>=0.115
+uvicorn[standard]<1,>=0.34
+pydantic<3,>=2.10
+pydantic-settings<3,>=2.7
+SQLAlchemy<3,>=2.0
+alembic<2,>=1.14
+psycopg[binary]<4,>=3.2
+redis<7,>=5
+prometheus-client<1,>=0.21
+httpx<1,>=0.28
+websockets<16,>=14
+
+[dev]
+pytest<9,>=8.3
+httpx<1,>=0.28
+ruff<1,>=0.9

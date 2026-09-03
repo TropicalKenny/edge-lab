@@ -153,3 +153,8 @@ def test_example_env_contains_blank_hosting_secrets():
     text = (ROOT / "deploy" / ".env.forward.example").read_text()
     assert _line_with(text, "CLOUDFLARE_TUNNEL_TOKEN=") == "CLOUDFLARE_TUNNEL_TOKEN="
     assert _line_with(text, "DASHBOARD_DB_PASSWORD=") == "DASHBOARD_DB_PASSWORD="
+
+
+def test_scan_telemetry_table_is_explicitly_granted_to_reader_roles():
+    for name in ("compose.dashboard-local.yml", "compose.dashboard-tunnel.yml", "compose.controls.yml"):
+        assert "forward_scan_observations" in (ROOT / "deploy" / name).read_text()

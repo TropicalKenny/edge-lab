@@ -32,6 +32,7 @@ services:
           forward_study_incidents,
           forward_trade_records,
           forward_execution_records,
+          forward_scan_observations,
           hyperliquid_carry_positions,
           hyperliquid_perp_snapshots,
           hyperliquid_funding_snapshots,

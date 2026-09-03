@@ -108,3 +108,23 @@ class ForwardStudyIncident(Base):
     opened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ForwardScanObservation(Base):
+    __tablename__ = "forward_scan_observations"
+    __table_args__ = (
+        UniqueConstraint("study_id", "external_key", name="forward_scan_study_key_unique"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    study_id: Mapped[str] = mapped_column(ForeignKey("forward_studies.id"), index=True)
+    external_key: Mapped[str] = mapped_column(String(180))
+    observation_kind: Mapped[str] = mapped_column(String(24), index=True)
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    examined_count: Mapped[int] = mapped_column(Integer, default=0)
+    accepted_count: Mapped[int] = mapped_column(Integer, default=0)
+    rejected_count: Mapped[int] = mapped_column(Integer, default=0)
+    deferred_count: Mapped[int] = mapped_column(Integer, default=0)
+    rejection_reasons_json: Mapped[str] = mapped_column(Text, default="{}")
+    metadata_json: Mapped[str] = mapped_column(Text, default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

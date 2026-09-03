@@ -143,7 +143,7 @@ if "dashboard_edge" not in dash_networks or "default" not in dash_networks:
 role_command=str((services.get("dashboard-db-role", {}) or {}).get("command") or "")
 for table in (
     "strategies","strategy_versions","strategy_evaluation_runs","forward_studies",
-    "forward_nav_observations","forward_study_incidents","forward_trade_records","forward_execution_records",
+    "forward_nav_observations","forward_study_incidents","forward_trade_records","forward_execution_records","forward_scan_observations",
 ):
     if table not in role_command: fail("dashboard role grant is missing table: "+table)
 if "GRANT SELECT ON ALL TABLES" in role_command: fail("dashboard role grants SELECT on all tables")

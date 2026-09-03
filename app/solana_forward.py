@@ -21,6 +21,7 @@ from app.forward_models import (
 from app.forward_research import ForwardResearchError, ForwardResearchService
 from app.solana_research import SolanaForensicService
 from app.services import HealthRegistry
+from app.scan_telemetry import record_scan_observation
 from app.venues.solana import JupiterShadowClient, JupiterShadowQuote, USDC_MINT
 from app.venues.solana_models import (
     SolanaForensicFeatureSnapshot,
@@ -1129,13 +1130,22 @@ class SolanaLaunchBaselineForwardRunner:
         attempted = self._attempted_signatures(db, study.id)
         open_positions = self._open_positions(db, study.id)
         capacity = max(0, config.max_open_positions - len(open_positions))
+        cycle_key = f"solana-cycle:{int(_aware(now).timestamp() // 60)}"
         if capacity <= 0:
+            record_scan_observation(
+                db, study_id=study.id, external_key=cycle_key, observation_kind="cycle",
+                observed_at=now, deferred_count=1, metadata={"open_positions": len(open_positions)},
+            )
             return 0, 0
         equity = self._equity(db, study)
         allocated_open = sum(
             (position.allocated_capital_usd for position in open_positions), ZERO
         )
         if allocated_open + config.entry_notional_usd > equity:
+            record_scan_observation(
+                db, study_id=study.id, external_key=cycle_key, observation_kind="cycle",
+                observed_at=now, deferred_count=1, metadata={"capital_capacity_blocked": 1},
+            )
             return 0, 0
 
         cutoff = _aware(now) - timedelta(minutes=config.max_candidate_age_minutes)
@@ -1150,34 +1160,78 @@ class SolanaLaunchBaselineForwardRunner:
         ).all()
         opened = 0
         quote_attempts = 0
+        features_ready = 0
         for launch in launches:
             if launch.signature in attempted:
                 continue
             if opened >= min(capacity, config.max_entries_per_cycle):
                 break
-            feature = await self._ensure_feature(
-                db,
-                launch,
-                config,
-                now=now,
-            )
+            feature = await self._ensure_feature(db, launch, config, now=now)
             if feature is None:
                 continue
+            features_ready += 1
+            candidate_key = f"solana-candidate:{launch.signature}"
             security = self._security_for_feature(db, feature)
-            eligible, _ = self._eligibility(feature, security, config)
+            eligible, eligibility_reasons = self._eligibility(feature, security, config)
             if not eligible:
+                record_scan_observation(
+                    db,
+                    study_id=study.id,
+                    external_key=candidate_key,
+                    observation_kind="candidate",
+                    observed_at=_aware(feature.captured_at),
+                    examined_count=1,
+                    rejected_count=1,
+                    rejection_reasons={reason: 1 for reason in eligibility_reasons},
+                    metadata={"mint": launch.mint, "stage": "safety_exitability"},
+                )
                 continue
             if allocated_open + (opened + 1) * config.entry_notional_usd > equity:
+                record_scan_observation(
+                    db, study_id=study.id, external_key=candidate_key, observation_kind="candidate",
+                    observed_at=_aware(feature.captured_at), examined_count=1, rejected_count=1,
+                    rejection_reasons={"SIMULATED_EQUITY_INSUFFICIENT": 1},
+                    metadata={"mint": launch.mint, "stage": "capital"},
+                )
                 break
             quote_attempts += 1
-            if await self._attempt_entry(
-                db,
-                study,
-                launch,
-                feature,
-                config,
-            ):
+            did_open = await self._attempt_entry(db, study, launch, feature, config)
+            if did_open:
                 opened += 1
+                record_scan_observation(
+                    db, study_id=study.id, external_key=candidate_key, observation_kind="candidate",
+                    observed_at=datetime.now(timezone.utc), examined_count=1, accepted_count=1,
+                    metadata={"mint": launch.mint, "stage": "delayed_execution", "status": "opened"},
+                )
+            else:
+                execution = db.scalar(
+                    select(ForwardExecutionRecord).where(
+                        ForwardExecutionRecord.study_id == study.id,
+                        ForwardExecutionRecord.external_key == self._entry_key(launch.signature),
+                    )
+                )
+                reason = "QUOTE_STAGE_REJECTED"
+                if execution is not None:
+                    reason = str(self._metadata(execution).get("reason") or reason)
+                record_scan_observation(
+                    db, study_id=study.id, external_key=candidate_key, observation_kind="candidate",
+                    observed_at=datetime.now(timezone.utc), examined_count=1, rejected_count=1,
+                    rejection_reasons={reason: 1},
+                    metadata={"mint": launch.mint, "stage": "delayed_execution"},
+                )
+        record_scan_observation(
+            db,
+            study_id=study.id,
+            external_key=cycle_key,
+            observation_kind="cycle",
+            observed_at=now,
+            metadata={
+                "launches_in_window": len(launches),
+                "features_ready": features_ready,
+                "quote_attempts": quote_attempts,
+                "opened": opened,
+            },
+        )
         return opened, quote_attempts
 
     async def run_study_once(
