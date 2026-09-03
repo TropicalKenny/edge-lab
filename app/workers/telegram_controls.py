@@ -6,6 +6,7 @@ import logging
 from app.config import get_settings
 from app.database import get_session_factory
 from app.telegram_control import TelegramControlClient, TelegramControlRouter
+from app.telegram_menu import sync_owner_command_menu
 
 log = logging.getLogger("edge_lab.telegram_controls")
 
@@ -24,8 +25,24 @@ async def run() -> None:
         poll_timeout_seconds=settings.telegram_control_poll_timeout_seconds,
         request_timeout_seconds=settings.telegram_timeout_seconds,
     ) as client:
+        menu_synced = False
         while True:
             try:
+                # Telegram persists BotFather/bot command menus independently from the
+                # worker. Replace any stale Kennysbot/live-execution menu with the
+                # exact Edge Lab paper/shadow command set. A transient menu-sync
+                # failure must not take owner controls down; retry on the next cycle.
+                if not menu_synced:
+                    try:
+                        await sync_owner_command_menu(client._call)
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception:
+                        log.exception("Telegram owner command-menu sync failed")
+                    else:
+                        menu_synced = True
+                        log.info("Telegram owner command menu synchronized")
+
                 # Never hold a database transaction open while Telegram long-polls.
                 db = SessionLocal()
                 try:
