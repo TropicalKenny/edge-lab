@@ -15,6 +15,7 @@ from app.dashboard_api import dashboard_summary
 from app.forward_models import ForwardStudy
 from app.lifecycle_performance import LifecyclePerformanceService
 from app.lifecycle_research import CANDIDATE_POLICIES, POLICY_VERSION
+from app.research_snapshot import build_research_snapshot, render_research_snapshot_text
 
 
 class TelegramControlError(RuntimeError):
@@ -39,15 +40,36 @@ def _short(value: str, size: int = 12) -> str:
     return value if len(value) <= size else value[:size]
 
 
-HELP_TEXT = """EDGE LAB — OWNER CONTROLS
+BOT_COMMANDS = [
+    {"command": "research", "description": "Consolidated read-only research snapshot"},
+    {"command": "status", "description": "System and study status"},
+    {"command": "performance", "description": "Study and lifecycle performance"},
+    {"command": "evidence", "description": "Latest evidence recommendations"},
+    {"command": "strategies", "description": "Current research strategies"},
+    {"command": "balance", "description": "Simulated paper/shadow balance"},
+    {"command": "pnl", "description": "Simulated P&L by study"},
+    {"command": "incidents", "description": "Unresolved research incidents"},
+    {"command": "pause", "description": "Pause a research study"},
+    {"command": "resume", "description": "Resume a paused research study"},
+    {"command": "freeze", "description": "Permanently freeze a research study"},
+    {"command": "lifecycle", "description": "Toggle Solana lifecycle research"},
+    {"command": "incident", "description": "Acknowledge or resolve an incident"},
+    {"command": "help", "description": "Show command usage"},
+]
 
-Read:
+
+HELP_TEXT = """EDGE LAB — OWNER MENU
+
+Research:
+/research — consolidated research snapshot
+/performance — returns, drawdown and M6H comparison
+/evidence — current evidence recommendations
+/strategies — strategy/study summary
+
+Account & health:
 /status
 /balance
 /pnl
-/performance
-/strategies
-/evidence
 /incidents
 
 Research controls:
@@ -104,6 +126,9 @@ class TelegramControlClient:
             description = str(body.get("description") or "request rejected")
             raise TelegramControlError(f"Telegram rejected request: {description[:200]}")
         return body
+
+    async def set_commands(self) -> None:
+        await self._call("setMyCommands", {"commands": BOT_COMMANDS})
 
     async def get_updates(self, *, offset: int | None) -> list[dict[str, Any]]:
         payload: dict[str, Any] = {
@@ -182,10 +207,11 @@ class TelegramControlRouter:
     def render(self, db: Session, text: str) -> str:
         token = text.split()[0]
         command = token.split("@", 1)[0].lower()
-        args = text.split()[1:]
 
         if command in {"/start", "/help"}:
             return HELP_TEXT
+        if command in {"/research", "/snapshot"}:
+            return self._research(db)
         if command == "/status":
             return self._status(db)
         if command == "/balance":
@@ -315,6 +341,10 @@ class TelegramControlRouter:
     @staticmethod
     def _summary(db: Session) -> dict[str, Any]:
         return dashboard_summary(db)
+
+    def _research(self, db: Session) -> str:
+        snapshot = build_research_snapshot(db, settings=self.settings)
+        return render_research_snapshot_text(snapshot)
 
     def _status(self, db: Session) -> str:
         data = self._summary(db)
