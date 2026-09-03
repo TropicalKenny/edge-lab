@@ -38,17 +38,17 @@ def _spot_context(
 
 
 def parse_spot_contexts(payload: Any, *, captured_at: datetime | None = None) -> list[SpotContext]:
-    """Parse the current Hyperliquid spot universe without positional corruption.
+    """Parse Hyperliquid spot contexts using the market index contract.
 
-    Current mainnet responses may contain more asset-context rows than current spot
-    markets. The current `spotMeta.universe` is therefore the source of truth: when
-    contexts expose a `coin` identity, each listed market is matched only to a context
-    whose identity exactly equals that market's metadata `name`. Extra context rows
-    that are not current markets are ignored. Missing or duplicate contexts for a
-    current market fail closed.
+    `spotMetaAndAssetCtxs` may return substantially more context rows than currently
+    listed spot markets. Current market metadata is the source of truth. Each market's
+    explicit `index` selects its corresponding row in the context array. Context rows
+    not referenced by the current universe are ignored.
 
-    Older response shapes without `coin` retain positional parsing, but only when the
-    metadata and context arrays have identical lengths.
+    For every current market we still fail closed when the market index is missing,
+    duplicated, negative or out of range; the referenced row is not a mapping; a
+    non-empty `coin` identity disagrees with the market metadata name; token metadata
+    is incomplete; or the referenced context has no usable price.
     """
 
     captured_at = captured_at or datetime.now(timezone.utc)
@@ -72,50 +72,46 @@ def parse_spot_contexts(payload: Any, *, captured_at: datetime | None = None) ->
         except (TypeError, ValueError):
             continue
 
-    context_identities = [
-        str(ctx.get("coin", "")).strip() if isinstance(ctx, dict) else ""
-        for ctx in contexts
-    ]
-    identified_count = sum(bool(identity) for identity in context_identities)
-
     aligned: list[tuple[dict[str, Any], dict[str, Any]]] = []
-    if identified_count:
-        if identified_count != len(contexts):
-            raise HyperliquidInfoError("mixed identified/unidentified spot contexts")
+    seen_market_names: set[str] = set()
+    seen_market_indexes: set[int] = set()
 
-        contexts_by_identity: dict[str, dict[str, Any]] = {}
-        duplicate_identities: set[str] = set()
-        for ctx, identity in zip(contexts, context_identities, strict=True):
-            if not isinstance(ctx, dict):
-                raise HyperliquidInfoError("invalid identified spot context")
-            if identity in contexts_by_identity:
-                duplicate_identities.add(identity)
-            else:
-                contexts_by_identity[identity] = ctx
+    for market in universe:
+        if not isinstance(market, dict):
+            raise HyperliquidInfoError("invalid current spot metadata entry")
 
-        seen_market_names: set[str] = set()
-        for market in universe:
-            if not isinstance(market, dict):
-                raise HyperliquidInfoError("invalid current spot metadata entry")
-            market_name = str(market.get("name", "")).strip()
-            if not market_name:
-                raise HyperliquidInfoError("current spot market is missing a name")
-            if market_name in seen_market_names:
-                raise HyperliquidInfoError(f"duplicate current spot market name: {market_name}")
-            seen_market_names.add(market_name)
-            if market_name in duplicate_identities:
-                raise HyperliquidInfoError(f"duplicate spot context for current market: {market_name}")
-            ctx = contexts_by_identity.get(market_name)
-            if ctx is None:
-                raise HyperliquidInfoError(f"missing spot context for current market: {market_name}")
-            aligned.append((market, ctx))
-    else:
-        if len(universe) != len(contexts):
-            raise HyperliquidInfoError("spot metadata/context length mismatch without context identities")
-        for market, ctx in zip(universe, contexts, strict=True):
-            if not isinstance(market, dict) or not isinstance(ctx, dict):
-                raise HyperliquidInfoError("invalid positional spot metadata/context entry")
-            aligned.append((market, ctx))
+        market_name = str(market.get("name", "")).strip()
+        if not market_name:
+            raise HyperliquidInfoError("current spot market is missing a name")
+        if market_name in seen_market_names:
+            raise HyperliquidInfoError(f"duplicate current spot market name: {market_name}")
+        seen_market_names.add(market_name)
+
+        try:
+            market_index = int(market["index"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise HyperliquidInfoError(f"invalid spot market index for current market: {market_name}") from exc
+        if market_index < 0:
+            raise HyperliquidInfoError(f"invalid spot market index for current market: {market_name}")
+        if market_index in seen_market_indexes:
+            raise HyperliquidInfoError(f"duplicate current spot market index: {market_index}")
+        seen_market_indexes.add(market_index)
+        if market_index >= len(contexts):
+            raise HyperliquidInfoError(
+                f"spot context index out of range for current market: {market_name} ({market_index})"
+            )
+
+        ctx = contexts[market_index]
+        if not isinstance(ctx, dict):
+            raise HyperliquidInfoError(f"invalid spot context for current market: {market_name}")
+
+        context_identity = str(ctx.get("coin", "")).strip()
+        if context_identity and context_identity != market_name:
+            raise HyperliquidInfoError(
+                f"spot context identity mismatch for current market: {market_name} != {context_identity}"
+            )
+
+        aligned.append((market, ctx))
 
     out: list[SpotContext] = []
     for market, ctx in aligned:
