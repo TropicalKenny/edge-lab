@@ -1,0 +1,73 @@
+name: Apply Polymarket and Telegram Fixes
+
+on:
+  push:
+    branches:
+      - fix/polymarket-gamma-keyset-contract
+    paths:
+      - .github/workflows/apply-polymarket-telegram-fixes.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-verify-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/polymarket-gamma-keyset-contract
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Apply narrow fixes and regression tests
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          polymarket = Path('app/venues/polymarket.py')
+          text = polymarket.read_text()
+          old = '            "order": "liquidity_num",\n'
+          new = '            "order": "liquidityNum",\n'
+          if text.count(old) != 1:
+              raise SystemExit(f'expected exactly one legacy Polymarket sort field, found {text.count(old)}')
+          polymarket.write_text(text.replace(old, new, 1))
+
+          telegram = Path('app/telegram_control.py')
+          text = telegram.read_text()
+          old = '''    async def set_commands(self) -> None:\n        await self._call("setMyCommands", {"commands": BOT_COMMANDS})\n'''
+          new = '''    async def set_commands(self, *, chat_id: str | None = None) -> None:\n        # Telegram command menus are persisted independently by scope and language.\n        # Synchronize every scope that can govern the owner's private bot chat so\n        # legacy live-trading commands cannot survive as a chat-specific override.\n        scopes: list[dict[str, Any] | None] = [\n            None,\n            {"type": "all_private_chats"},\n        ]\n        if chat_id:\n            scopes.append({"type": "chat", "chat_id": chat_id})\n\n        for scope in scopes:\n            for language_code in (None, "en"):\n                payload: dict[str, Any] = {"commands": BOT_COMMANDS}\n                if scope is not None:\n                    payload["scope"] = scope\n                if language_code is not None:\n                    payload["language_code"] = language_code\n                await self._call("setMyCommands", payload)\n'''
+          if text.count(old) != 1:
+              raise SystemExit(f'expected exactly one Telegram set_commands method, found {text.count(old)}')
+          telegram.write_text(text.replace(old, new, 1))
+
+          worker = Path('app/workers/telegram_controls.py')
+          text = worker.read_text()
+          old = '            await client.set_commands()\n'
+          new = '            await client.set_commands(chat_id=router.chat_id)\n'
+          if text.count(old) != 1:
+              raise SystemExit(f'expected exactly one Telegram startup menu call, found {text.count(old)}')
+          worker.write_text(text.replace(old, new, 1))
+
+          Path('tests/test_polymarket_keyset_contract.py').write_text('''import asyncio\n\nimport httpx\n\nfrom app.venues.polymarket import PolymarketPublicClient\n\n\ndef test_gamma_keyset_uses_current_camelcase_liquidity_sort_field():\n    seen = {}\n\n    async def handler(request: httpx.Request):\n        seen["params"] = dict(request.url.params)\n        return httpx.Response(200, json={"markets": [], "next_cursor": None})\n\n    async def run():\n        async with PolymarketPublicClient(gamma_transport=httpx.MockTransport(handler)) as client:\n            await client.list_markets_page(limit=2)\n\n    asyncio.run(run())\n    assert seen["params"]["order"] == "liquidityNum"\n    assert seen["params"]["ascending"] == "false"\n    assert seen["params"]["closed"] == "false"\n''')
+
+          Path('tests/test_telegram_menu_scopes.py').write_text('''import asyncio\nimport json\n\nimport httpx\n\nfrom app.telegram_control import BOT_COMMANDS, TelegramControlClient\n\n\ndef test_owner_menu_replaces_default_private_and_owner_chat_scopes_for_english():\n    calls = []\n\n    async def handler(request: httpx.Request):\n        calls.append((request.url.path, json.loads(request.content.decode())))\n        return httpx.Response(200, json={"ok": True, "result": True})\n\n    async def run():\n        async with TelegramControlClient(\n            bot_token="test-token",\n            transport=httpx.MockTransport(handler),\n        ) as client:\n            await client.set_commands(chat_id="123456")\n\n    asyncio.run(run())\n\n    assert len(calls) == 6\n    assert all(path.endswith("/setMyCommands") for path, _ in calls)\n    assert all(payload["commands"] == BOT_COMMANDS for _, payload in calls)\n\n    variants = {\n        (\n            json.dumps(payload.get("scope"), sort_keys=True),\n            payload.get("language_code"),\n        )\n        for _, payload in calls\n    }\n    assert variants == {\n        ("null", None),\n        ("null", "en"),\n        (json.dumps({"type": "all_private_chats"}, sort_keys=True), None),\n        (json.dumps({"type": "all_private_chats"}, sort_keys=True), "en"),\n        (json.dumps({"type": "chat", "chat_id": "123456"}, sort_keys=True), None),\n        (json.dumps({"type": "chat", "chat_id": "123456"}, sort_keys=True), "en"),\n    }\n\n    names = [item["command"] for item in BOT_COMMANDS]\n    for forbidden in ("sell", "sellall", "stop", "papermode", "golive", "confirm", "tp", "sl", "strict", "loose", "setbuysol", "pending", "approve", "reject"):\n        assert forbidden not in names\n''')
+          PY
+      - name: Install
+        run: pip install -e . pytest
+      - name: Full repository verification
+        run: sh scripts/verify-repo.sh
+      - name: Remove temporary workflows and commit verified fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/diagnose-polymarket-keyset.yml
+          rm -f .github/workflows/apply-polymarket-telegram-fixes.yml
+          git config user.name 'TropicalKenny'
+          git config user.email '138382176+TropicalKenny@users.noreply.github.com'
+          git add app/venues/polymarket.py app/telegram_control.py app/workers/telegram_controls.py tests/test_polymarket_keyset_contract.py tests/test_telegram_menu_scopes.py .github/workflows
+          git commit -m 'fix: repair Polymarket keyset and Telegram scoped menu'
+          git push origin HEAD:fix/polymarket-gamma-keyset-contract
