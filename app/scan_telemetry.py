@@ -4,7 +4,7 @@ import json
 import re
 from collections import Counter
 from datetime import datetime, timedelta, timezone
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -21,6 +21,29 @@ _NUMERIC_METADATA_KEYS = {
     "structural_candidates",
     "attempts",
     "trades",
+    # M6J research-acceleration telemetry. These are observation counters only;
+    # they never alter baseline trade/evaluation evidence.
+    "m6j_horizons_tested",
+    "m6j_assets_tested",
+    "m6j_candidates_examined",
+    "m6j_positive_edge_candidates",
+    "m6j_nonpositive_edge_candidates",
+    "m6j_ws_messages",
+    "m6j_book_events",
+    "m6j_pair_checks",
+    "m6j_binary_checks",
+    "m6j_negrisk_checks",
+    "m6j_positive_edge_events",
+    "m6j_baseline_10bps_edge_events",
+    "m6j_markets_subscribed",
+    "m6j_assets_subscribed",
+    "m6j_safe_candidates",
+    "m6j_unknown_candidates",
+    "m6j_unsafe_candidates",
+    "m6j_counterfactual_quote_attempts",
+    "m6j_counterfactual_entry_quotes",
+    "m6j_counterfactual_roundtrip_quotes",
+    "m6j_counterfactual_outcomes",
 }
 
 
@@ -30,6 +53,27 @@ def _aware(value: datetime) -> datetime:
 
 def _json(value: Mapping[str, Any] | None) -> str:
     return json.dumps(dict(value or {}), default=str, sort_keys=True, separators=(",", ":"))
+
+
+def _metadata(row: ForwardScanObservation) -> dict[str, Any]:
+    try:
+        value = json.loads(row.metadata_json)
+    except (json.JSONDecodeError, TypeError):
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def _lane_token(lane: str) -> str:
+    return f'"research_lane":"{lane.strip()}"'
+
+
+def _apply_lane_filters(stmt, *, research_lane: str | None, exclude_research_lanes: Sequence[str]):
+    if research_lane:
+        stmt = stmt.where(ForwardScanObservation.metadata_json.contains(_lane_token(research_lane)))
+    for lane in exclude_research_lanes:
+        if lane.strip():
+            stmt = stmt.where(~ForwardScanObservation.metadata_json.contains(_lane_token(lane)))
+    return stmt
 
 
 def normalize_reason(value: str) -> str:
@@ -109,24 +153,40 @@ def scan_activity_summary(
     study_id: str,
     now: datetime,
     window_hours: int = 24,
+    research_lane: str | None = None,
+    exclude_research_lanes: Sequence[str] = (),
 ) -> dict[str, Any]:
+    """Summarize durable scan telemetry with optional lane isolation.
+
+    M6J intentionally writes observation-only telemetry under the same study foreign key
+    as the frozen baseline it is comparing against. Lane filters keep those observations
+    analytically separate so baseline activity counts are never inflated by M6J.
+    """
+
+    if research_lane and research_lane in exclude_research_lanes:
+        raise ValueError("research_lane cannot also be excluded")
     now = _aware(now)
     since = now - timedelta(hours=window_hours)
-    rows = db.scalars(
-        select(ForwardScanObservation)
-        .where(
-            ForwardScanObservation.study_id == study_id,
-            ForwardScanObservation.observed_at >= since,
-            ForwardScanObservation.observed_at <= now,
-        )
-        .order_by(ForwardScanObservation.observed_at.asc())
-    ).all()
-    earliest = db.scalar(
-        select(ForwardScanObservation)
-        .where(ForwardScanObservation.study_id == study_id)
-        .order_by(ForwardScanObservation.observed_at.asc())
-        .limit(1)
+    rows_stmt = select(ForwardScanObservation).where(
+        ForwardScanObservation.study_id == study_id,
+        ForwardScanObservation.observed_at >= since,
+        ForwardScanObservation.observed_at <= now,
     )
+    rows_stmt = _apply_lane_filters(
+        rows_stmt,
+        research_lane=research_lane,
+        exclude_research_lanes=exclude_research_lanes,
+    )
+    rows = db.scalars(rows_stmt.order_by(ForwardScanObservation.observed_at.asc())).all()
+
+    earliest_stmt = select(ForwardScanObservation).where(ForwardScanObservation.study_id == study_id)
+    earliest_stmt = _apply_lane_filters(
+        earliest_stmt,
+        research_lane=research_lane,
+        exclude_research_lanes=exclude_research_lanes,
+    )
+    earliest = db.scalar(earliest_stmt.order_by(ForwardScanObservation.observed_at.asc()).limit(1))
+
     reasons: Counter[str] = Counter()
     metadata_totals: Counter[str] = Counter()
     examined = accepted = rejected = deferred = cycles = 0
@@ -149,18 +209,15 @@ def scan_activity_summary(
                     reasons[normalize_reason(reason)] += max(0, int(count))
                 except (TypeError, ValueError):
                     continue
-        try:
-            meta = json.loads(row.metadata_json)
-        except json.JSONDecodeError:
-            meta = {}
-        if isinstance(meta, dict):
-            for key in _NUMERIC_METADATA_KEYS:
-                value = meta.get(key)
-                if isinstance(value, (int, float)) and not isinstance(value, bool):
-                    metadata_totals[key] += int(value)
+        meta = _metadata(row)
+        for key in _NUMERIC_METADATA_KEYS:
+            value = meta.get(key)
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                metadata_totals[key] += int(value)
     return {
         "tracking": earliest is not None,
         "tracking_since": _aware(earliest.observed_at) if earliest is not None else None,
+        "research_lane": research_lane,
         "window_hours": window_hours,
         "last_scan_at": last_scan_at,
         "cycles": cycles,
