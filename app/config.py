@@ -108,9 +108,13 @@ class Settings(BaseSettings):
     forward_ingest_secret: str = ''
     forward_evaluation_poll_seconds: int = 3600
     forward_status_max_market_age_seconds: int = 900
+    owner_control_api_token: str = ''
     telegram_bot_token: str = ''
     telegram_chat_id: str = ''
+    telegram_owner_user_id: str = ''
     telegram_timeout_seconds: float = 10.0
+    telegram_control_poll_timeout_seconds: int = 25
+    telegram_control_retry_seconds: int = 3
     telegram_alert_poll_seconds: int = 60
     telegram_alert_max_attempts: int = 6
     telegram_alert_retry_base_seconds: int = 60
