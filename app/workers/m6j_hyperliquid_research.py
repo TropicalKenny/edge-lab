@@ -69,7 +69,13 @@ async def _cycle(client: HyperliquidInfoClient) -> None:
             maximum=24 * 30,
         )
         now = datetime.now(timezone.utc)
-        history_hours = max(168, min(settings.m6j_hyperliquid_history_hours, 24 * 90))
+        requested_history_hours = settings.m6j_hyperliquid_history_hours
+        if settings.m6k_enabled:
+            requested_history_hours = max(
+                requested_history_hours,
+                settings.m6k_hyperliquid_history_hours,
+            )
+        history_hours = max(168, min(requested_history_hours, 24 * 90))
         history_by_coin = {}
         for coin in coins:
             try:
@@ -81,7 +87,7 @@ async def _cycle(client: HyperliquidInfoClient) -> None:
                     now=now,
                 )
             except Exception:
-                log.exception("M6J funding-history refresh failed for %s", coin)
+                log.exception("M6J/M6K funding-history refresh failed for %s", coin)
                 history_by_coin[coin] = []
 
         examined = accepted = rejected = 0
@@ -188,24 +194,36 @@ async def _cycle(client: HyperliquidInfoClient) -> None:
                         rejection_reasons={reason: 1 for reason in screen.reasons},
                         metadata={
                             "research_lane": "m6k-hl",
-                            "research_mode": "persistence_screen_observation_only_no_execution",
+                            "research_mode": (
+                                "realized_rolling_funding_persistence_observation_only"
+                            ),
                             "screen_version": "m6k-hl-v1",
                             "coin": coin,
                             "horizon_hours": horizon,
                             "spot_pair": opportunity.spot_pair,
-                            "basis_bps": str(opportunity.basis_bps),
+                            "current_basis_bps": str(opportunity.basis_bps),
                             "estimated_round_trip_cost_bps": str(estimated_cost_bps),
                             "stress_cost_multiplier": str(
                                 settings.m6k_hyperliquid_cost_stress_multiplier
                             ),
-                            "observation_count": persistence.observation_count,
-                            "positive_edge_fraction": str(persistence.positive_edge_fraction),
-                            "baseline_edge_fraction": str(persistence.baseline_edge_fraction),
-                            "stress_positive_fraction": str(
+                            "history_hours_requested": history_hours,
+                            "funding_point_count": persistence.funding_point_count,
+                            "completed_rolling_window_count": persistence.observation_count,
+                            "rolling_windows_overlap": True,
+                            "uses_actual_historical_funding": True,
+                            "positive_window_fraction": str(
+                                persistence.positive_edge_fraction
+                            ),
+                            "baseline_window_fraction": str(
+                                persistence.baseline_edge_fraction
+                            ),
+                            "stress_positive_window_fraction": str(
                                 persistence.stress_positive_fraction
                             ),
-                            "current_baseline_streak": persistence.current_baseline_streak,
-                            "max_baseline_streak": persistence.max_baseline_streak,
+                            "current_baseline_window_streak": (
+                                persistence.current_baseline_streak
+                            ),
+                            "max_baseline_window_streak": persistence.max_baseline_streak,
                             "funding_sign_flips": persistence.funding_sign_flips,
                             "mean_funding_hourly": (
                                 str(persistence.mean_funding_hourly)
@@ -217,35 +235,37 @@ async def _cycle(client: HyperliquidInfoClient) -> None:
                                 if persistence.funding_stddev_hourly is not None
                                 else None
                             ),
-                            "mean_projected_edge_bps": (
-                                str(persistence.mean_projected_edge_bps)
-                                if persistence.mean_projected_edge_bps is not None
+                            "mean_realized_window_edge_bps": (
+                                str(persistence.mean_window_edge_bps)
+                                if persistence.mean_window_edge_bps is not None
                                 else None
                             ),
-                            "min_projected_edge_bps": (
-                                str(persistence.min_projected_edge_bps)
-                                if persistence.min_projected_edge_bps is not None
+                            "min_realized_window_edge_bps": (
+                                str(persistence.min_window_edge_bps)
+                                if persistence.min_window_edge_bps is not None
                                 else None
                             ),
-                            "max_projected_edge_bps": (
-                                str(persistence.max_projected_edge_bps)
-                                if persistence.max_projected_edge_bps is not None
+                            "max_realized_window_edge_bps": (
+                                str(persistence.max_window_edge_bps)
+                                if persistence.max_window_edge_bps is not None
                                 else None
                             ),
                             "screen_passed": screen.passed,
                             "screen_reasons": list(screen.reasons),
                             "screen_thresholds": {
-                                "min_observations": settings.m6k_hyperliquid_min_observations,
-                                "min_positive_fraction": str(
+                                "min_completed_windows": (
+                                    settings.m6k_hyperliquid_min_observations
+                                ),
+                                "min_positive_window_fraction": str(
                                     settings.m6k_hyperliquid_min_positive_fraction
                                 ),
-                                "min_baseline_fraction": str(
+                                "min_baseline_window_fraction": str(
                                     settings.m6k_hyperliquid_min_baseline_fraction
                                 ),
-                                "min_stress_positive_fraction": str(
+                                "min_stress_positive_window_fraction": str(
                                     settings.m6k_hyperliquid_min_stress_positive_fraction
                                 ),
-                                "min_current_baseline_streak": (
+                                "min_current_baseline_window_streak": (
                                     settings.m6k_hyperliquid_min_current_baseline_streak
                                 ),
                             },
@@ -281,7 +301,9 @@ async def _cycle(client: HyperliquidInfoClient) -> None:
                 observed_at=now,
                 metadata={
                     "research_lane": "m6k-hl",
-                    "research_mode": "persistence_screen_observation_only_no_execution",
+                    "research_mode": (
+                        "realized_rolling_funding_persistence_observation_only"
+                    ),
                     "screen_version": "m6k-hl-v1",
                     "m6k_hl_candidates_examined": m6k_examined,
                     "m6k_hl_screen_passed": m6k_passed,
