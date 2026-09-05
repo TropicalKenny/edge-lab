@@ -428,9 +428,10 @@ def _sample_unknown_resolutions(db, study: ForwardStudy, *, now: datetime) -> tu
             ForwardScanObservation.observed_at <= now,
         )
         .order_by(ForwardScanObservation.observed_at.asc())
-        .limit(max(1, settings.m6k_solana_resolution_max_per_cycle))
+        .limit(2000)
     ).all()
-    resolved_safe = resolved_unsafe = 0
+    resolved_safe = resolved_unsafe = checked = 0
+    check_limit = max(1, settings.m6k_solana_resolution_max_per_cycle)
     for row in rows:
         meta = _metadata(row)
         try:
@@ -450,6 +451,9 @@ def _sample_unknown_resolutions(db, study: ForwardStudy, *, now: datetime) -> tu
         )
         if exists is not None:
             continue
+        if checked >= check_limit:
+            break
+        checked += 1
         feature, security = _latest_feature_and_security(
             db,
             mint=mint,
@@ -463,15 +467,18 @@ def _sample_unknown_resolutions(db, study: ForwardStudy, *, now: datetime) -> tu
             continue
         resolved_safe += int(classification.state == "SAFE")
         resolved_unsafe += int(classification.state == "UNSAFE")
+        resolution_at = _aware(feature.captured_at)
+        if security is not None:
+            resolution_at = max(resolution_at, _aware(security.captured_at))
         lag_minutes = (
-            _aware(feature.captured_at) - _aware(original_feature_at)
+            resolution_at - _aware(original_feature_at)
         ).total_seconds() / 60
         record_scan_observation(
             db,
             study_id=study.id,
             external_key=resolution_key,
             observation_kind="candidate",
-            observed_at=_aware(feature.captured_at),
+            observed_at=resolution_at,
             metadata={
                 "research_lane": "m6k-sol",
                 "research_mode": "later_evidence_resolution_observation_only",
@@ -489,6 +496,7 @@ def _sample_unknown_resolutions(db, study: ForwardStudy, *, now: datetime) -> tu
                 "resolved_security_captured_at": (
                     _aware(security.captured_at).isoformat() if security is not None else None
                 ),
+                "resolved_at": resolution_at.isoformat(),
                 "resolution_lag_minutes": str(lag_minutes),
                 "original_decision_record_mutated": False,
                 "baseline_gate_unchanged": True,
