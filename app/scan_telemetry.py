@@ -44,6 +44,19 @@ _NUMERIC_METADATA_KEYS = {
     "m6j_counterfactual_entry_quotes",
     "m6j_counterfactual_roundtrip_quotes",
     "m6j_counterfactual_outcomes",
+    # M6K strategy-design telemetry. These lanes remain observation-only and are
+    # intentionally excluded from frozen baseline/evaluation evidence.
+    "m6k_hl_candidates_examined",
+    "m6k_hl_screen_passed",
+    "m6k_hl_screen_rejected",
+    "m6k_pm_event_checks",
+    "m6k_pm_valid_observations",
+    "m6k_pm_positive_violations",
+    "m6k_pm_baseline_qualified",
+    "m6k_sol_unknown_entries",
+    "m6k_sol_unknown_outcomes",
+    "m6k_sol_resolutions_safe",
+    "m6k_sol_resolutions_unsafe",
 }
 
 
@@ -158,9 +171,10 @@ def scan_activity_summary(
 ) -> dict[str, Any]:
     """Summarize durable scan telemetry with optional lane isolation.
 
-    M6J intentionally writes observation-only telemetry under the same study foreign key
-    as the frozen baseline it is comparing against. Lane filters keep those observations
-    analytically separate so baseline activity counts are never inflated by M6J.
+    M6J/M6K intentionally write observation-only telemetry under the same study foreign
+    key as the frozen baseline they compare against. Lane filters keep those observations
+    analytically separate so baseline activity counts are never inflated by challenger
+    research.
     """
 
     if research_lane and research_lane in exclude_research_lanes:
