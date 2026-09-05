@@ -128,7 +128,7 @@ def test_polymarket_ws_book_uses_rest_seed_metadata_and_validates_identity():
     assert book.book_hash == "ws-hash"
 
 
-def test_scan_summary_can_isolate_m6j_from_frozen_baseline_activity():
+def test_scan_summary_isolates_m6j_and_m6k_from_frozen_baseline_activity():
     engine = create_engine("sqlite+pysqlite:///:memory:")
     Base.metadata.create_all(engine)
     with Session(engine) as db:
@@ -153,18 +153,34 @@ def test_scan_summary_can_isolate_m6j_from_frozen_baseline_activity():
             accepted_count=1,
             metadata={"research_lane": "m6j", "m6j_candidates_examined": 1},
         )
+        record_scan_observation(
+            db,
+            study_id="study-1",
+            external_key="m6k-hl-1",
+            observation_kind="candidate",
+            observed_at=NOW + timedelta(seconds=2),
+            examined_count=1,
+            accepted_count=1,
+            metadata={"research_lane": "m6k-hl", "m6k_hl_candidates_examined": 1},
+        )
 
         baseline = scan_activity_summary(
             db,
             study_id="study-1",
             now=NOW + timedelta(minutes=1),
-            exclude_research_lanes=("m6j",),
+            exclude_research_lanes=("m6j", "m6k-hl", "m6k-pm", "m6k-sol"),
         )
         m6j = scan_activity_summary(
             db,
             study_id="study-1",
             now=NOW + timedelta(minutes=1),
             research_lane="m6j",
+        )
+        m6k = scan_activity_summary(
+            db,
+            study_id="study-1",
+            now=NOW + timedelta(minutes=1),
+            research_lane="m6k-hl",
         )
 
     assert baseline["examined"] == 1
@@ -174,3 +190,6 @@ def test_scan_summary_can_isolate_m6j_from_frozen_baseline_activity():
     assert m6j["accepted"] == 1
     assert m6j["rejected"] == 0
     assert m6j["metadata_totals"]["m6j_candidates_examined"] == 1
+    assert m6k["examined"] == 1
+    assert m6k["accepted"] == 1
+    assert m6k["metadata_totals"]["m6k_hl_candidates_examined"] == 1

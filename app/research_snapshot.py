@@ -17,6 +17,12 @@ from app.solana_forward_ops import study_statuses as solana_study_statuses
 from app.scan_telemetry import scan_activity_summary
 
 SNAPSHOT_SCHEMA = "edge-lab-research-snapshot-v1"
+CHALLENGER_RESEARCH_LANES = ("m6j", "m6k-hl", "m6k-pm", "m6k-sol")
+M6K_LANE_BY_VENUE = {
+    "hyperliquid": "m6k-hl",
+    "polymarket": "m6k-pm",
+    "solana": "m6k-sol",
+}
 
 
 def _aware(value: datetime | None) -> datetime | None:
@@ -119,17 +125,29 @@ def build_research_snapshot(
     studies: list[dict[str, Any]] = []
     for row in dashboard.get("studies") or []:
         study_id = str(row.get("study_id"))
+        venue = str(row.get("venue") or "").lower()
         baseline_activity = scan_activity_summary(
             db,
             study_id=study_id,
             now=captured_at,
-            exclude_research_lanes=("m6j",),
+            exclude_research_lanes=CHALLENGER_RESEARCH_LANES,
         )
         m6j_activity = scan_activity_summary(
             db,
             study_id=study_id,
             now=captured_at,
             research_lane="m6j",
+        )
+        m6k_lane = M6K_LANE_BY_VENUE.get(venue)
+        m6k_activity = (
+            scan_activity_summary(
+                db,
+                study_id=study_id,
+                now=captured_at,
+                research_lane=m6k_lane,
+            )
+            if m6k_lane
+            else None
         )
         studies.append(
             {
@@ -158,6 +176,7 @@ def build_research_snapshot(
                 "operational": _compact_operational(operational.get(study_id)),
                 "activity": baseline_activity,
                 "research_acceleration": m6j_activity,
+                "strategy_research": m6k_activity,
             }
         )
 
@@ -341,6 +360,35 @@ def render_research_snapshot_text(snapshot: dict[str, Any]) -> str:
                     f"quote attempts {m6j_meta.get('m6j_counterfactual_quote_attempts', 0)} | "
                     f"outcomes {m6j_meta.get('m6j_counterfactual_outcomes', 0)}"
                 )
+
+        m6k = row.get("strategy_research") or {}
+        if m6k.get("tracking"):
+            meta = m6k.get("metadata_totals") or {}
+            venue = str(row.get("venue") or "").lower()
+            if venue == "hyperliquid":
+                lines.append(
+                    "M6K strategy research: PERSISTENCE SCREEN ONLY | "
+                    f"tested {meta.get('m6k_hl_candidates_examined', 0)} | "
+                    f"screen-pass {meta.get('m6k_hl_screen_passed', 0)} | "
+                    f"screen-reject {meta.get('m6k_hl_screen_rejected', 0)}"
+                )
+            elif venue == "polymarket":
+                lines.append(
+                    "M6K strategy research: EVENT CONSISTENCY | "
+                    f"checks {meta.get('m6k_pm_event_checks', 0)} | "
+                    f"valid {meta.get('m6k_pm_valid_observations', 0)} | "
+                    f"positive gaps {meta.get('m6k_pm_positive_violations', 0)} | "
+                    f">=baseline {meta.get('m6k_pm_baseline_qualified', 0)}"
+                )
+            elif venue == "solana":
+                lines.append(
+                    "M6K strategy research: UNKNOWN DECOMPOSITION | "
+                    f"new unknown {meta.get('m6k_sol_unknown_entries', 0)} | "
+                    f"outcomes {meta.get('m6k_sol_unknown_outcomes', 0)} | "
+                    f"later SAFE {meta.get('m6k_sol_resolutions_safe', 0)} | "
+                    f"later UNSAFE {meta.get('m6k_sol_resolutions_unsafe', 0)}"
+                )
+
         hard = op.get("hard_reasons") or []
         warnings = op.get("warnings") or []
         if hard:
@@ -352,7 +400,7 @@ def render_research_snapshot_text(snapshot: dict[str, Any]) -> str:
         [
             "",
             f"Open incidents: {portfolio.get('unresolved_incidents', 0)}",
-            "Research only. This snapshot cannot trade, sign, move funds, access a wallet, or execute shell commands.",
+            "Research only. M6J/M6K challenger observations do not promote a strategy and cannot trade, sign, move funds, access a wallet, or execute shell commands.",
         ]
     )
     return "\n".join(lines)

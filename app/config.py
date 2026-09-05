@@ -102,6 +102,17 @@ class Settings(BaseSettings):
     m6j_solana_max_outcomes_per_cycle: int = 40
     m6j_solana_quote_notional_usd: float = 25.0
     m6j_solana_outcome_horizons_minutes: str = '5,15,30,60'
+    m6k_enabled: bool = True
+    m6k_hyperliquid_history_hours: int = 2160
+    m6k_hyperliquid_min_observations: int = 168
+    m6k_hyperliquid_min_positive_fraction: float = 0.70
+    m6k_hyperliquid_min_baseline_fraction: float = 0.50
+    m6k_hyperliquid_min_stress_positive_fraction: float = 0.50
+    m6k_hyperliquid_min_current_baseline_streak: int = 24
+    m6k_hyperliquid_cost_stress_multiplier: float = 2.0
+    m6k_polymarket_baseline_edge_bps: float = 10.0
+    m6k_solana_resolution_lookback_hours: int = 72
+    m6k_solana_resolution_max_per_cycle: int = 100
     portfolio_min_unallocated_pct: float = 0.40
     portfolio_global_planned_risk_pct: float = 0.02
     portfolio_bucket_planned_risk_pct: float = 0.01
