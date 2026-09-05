@@ -103,6 +103,7 @@ class Settings(BaseSettings):
     m6j_solana_quote_notional_usd: float = 25.0
     m6j_solana_outcome_horizons_minutes: str = '5,15,30,60'
     m6k_enabled: bool = True
+    m6k_hyperliquid_history_hours: int = 2160
     m6k_hyperliquid_min_observations: int = 168
     m6k_hyperliquid_min_positive_fraction: float = 0.70
     m6k_hyperliquid_min_baseline_fraction: float = 0.50
