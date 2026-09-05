@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, timezone
 from decimal import Decimal
 
@@ -15,8 +16,8 @@ NOW = datetime(2026, 9, 5, 14, 0, tzinfo=timezone.utc)
 D = Decimal
 
 
-def test_hyperliquid_persistence_screen_requires_durable_cost_stressed_edge():
-    rates = [D("0.0001")] * 168
+def test_hyperliquid_persistence_screen_uses_realized_rolling_funding_windows():
+    rates = [D("0.0001")] * 200
     metrics = hyperliquid_persistence_metrics(
         rates,
         horizon_hours=24,
@@ -26,11 +27,13 @@ def test_hyperliquid_persistence_screen_requires_durable_cost_stressed_edge():
     )
     screen = evaluate_hyperliquid_persistence_screen(metrics)
 
-    assert metrics.observation_count == 168
+    assert metrics.funding_point_count == 200
+    assert metrics.observation_count == 177
+    assert metrics.mean_window_edge_bps == D("14.0000")
     assert metrics.positive_edge_fraction == D("1")
     assert metrics.baseline_edge_fraction == D("1")
     assert metrics.stress_positive_fraction == D("1")
-    assert metrics.current_baseline_streak == 168
+    assert metrics.current_baseline_streak == 177
     assert metrics.funding_sign_flips == 0
     assert screen.passed is True
     assert screen.reasons == ()
@@ -45,7 +48,8 @@ def test_hyperliquid_persistence_screen_rejects_current_spike_without_history():
     )
     screen = evaluate_hyperliquid_persistence_screen(metrics)
 
-    assert metrics.observation_count == 30
+    assert metrics.funding_point_count == 30
+    assert metrics.observation_count == 7
     assert metrics.funding_sign_flips == 1
     assert screen.passed is False
     assert "INSUFFICIENT_PERSISTENCE_OBSERVATIONS" in screen.reasons
@@ -80,6 +84,20 @@ def _market(index: int, *, other: bool = False) -> MarketContext:
     )
 
 
+def _event(*markets: MarketContext) -> EventContext:
+    return EventContext(
+        event_id="event-1",
+        title="Complete event",
+        slug="event-1",
+        description="Exactly one outcome wins.",
+        resolution_source="official",
+        neg_risk=True,
+        neg_risk_augmented=False,
+        markets=tuple(markets),
+        captured_at=NOW,
+    )
+
+
 def _book(index: int, ask: str) -> OrderBook:
     return OrderBook(
         condition_id=f"condition-{index}",
@@ -97,17 +115,7 @@ def _book(index: int, ask: str) -> OrderBook:
 
 
 def test_polymarket_event_consistency_records_positive_and_negative_gaps():
-    event = EventContext(
-        event_id="event-1",
-        title="Complete event",
-        slug="event-1",
-        description="Exactly one outcome wins.",
-        resolution_source="official",
-        neg_risk=True,
-        neg_risk_augmented=False,
-        markets=tuple(_market(index) for index in range(3)),
-        captured_at=NOW,
-    )
+    event = _event(*(_market(index) for index in range(3)))
     positive, reasons = polymarket_negrisk_yes_consistency(
         event,
         {f"yes-{index}": _book(index, "0.30") for index in range(3)},
@@ -137,20 +145,10 @@ def test_polymarket_event_consistency_records_positive_and_negative_gaps():
     assert negative.gap_usd < 0
 
 
-def test_polymarket_event_consistency_fails_closed_on_dynamic_other():
-    event = EventContext(
-        event_id="event-1",
-        title="Unsafe event",
-        slug="unsafe-event",
-        description=None,
-        resolution_source="official",
-        neg_risk=True,
-        neg_risk_augmented=False,
-        markets=(_market(0, other=True), _market(1), _market(2)),
-        captured_at=NOW,
-    )
+def test_polymarket_event_consistency_fails_closed_on_dynamic_or_incomplete_event():
+    dynamic = _event(_market(0, other=True), _market(1), _market(2))
     observation, reasons = polymarket_negrisk_yes_consistency(
-        event,
+        dynamic,
         {f"yes-{index}": _book(index, "0.30") for index in range(3)},
         now=NOW,
         max_shares=D("100"),
@@ -159,6 +157,19 @@ def test_polymarket_event_consistency_fails_closed_on_dynamic_other():
     )
     assert observation is None
     assert reasons == ("DYNAMIC_OTHER_OUTCOME",)
+
+    inactive = replace(_market(2), accepting_orders=False)
+    incomplete = _event(_market(0), _market(1), inactive)
+    observation, reasons = polymarket_negrisk_yes_consistency(
+        incomplete,
+        {f"yes-{index}": _book(index, "0.30") for index in range(3)},
+        now=NOW,
+        max_shares=D("100"),
+        max_book_age_seconds=5,
+        fee_buffer_pct=D("2"),
+    )
+    assert observation is None
+    assert reasons == ("INCOMPLETE_NEG_RISK_EVENT",)
 
 
 def test_solana_unknown_group_is_preregistered_and_non_promotional():
