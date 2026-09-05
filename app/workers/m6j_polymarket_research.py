@@ -369,7 +369,15 @@ async def _stream_once(client: PolymarketPublicClient, study_id: str) -> None:
     summary_started = datetime.now(timezone.utc)
     connected_at = time.monotonic()
 
-    async with websockets.connect(MARKET_WS_URL, ping_interval=None, close_timeout=5) as ws:
+    # Polymarket can send an initial multi-book snapshot slightly above the
+    # websockets library's 1 MiB default. Keep a finite 4 MiB ceiling rather than
+    # disabling message limits, so malformed/unbounded frames still fail closed.
+    async with websockets.connect(
+        MARKET_WS_URL,
+        ping_interval=None,
+        close_timeout=5,
+        max_size=4 * 1024 * 1024,
+    ) as ws:
         await ws.send(json.dumps({"assets_ids": token_ids, "type": "market"}, separators=(",", ":")))
         while True:
             if time.monotonic() - connected_at >= settings.m6j_polymarket_refresh_seconds:

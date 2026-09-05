@@ -67,3 +67,9 @@ def test_m6j_m6k_do_not_replace_frozen_baseline_ids():
     assert "M6K_POLYMARKET_BASELINE_EDGE_BPS=10" in env
     assert "M6K_SOLANA_RESOLUTION_LOOKBACK_HOURS=72" in env
     assert "M6K_SOLANA_RESOLUTION_MAX_PER_CYCLE=100" in env
+
+
+def test_polymarket_research_websocket_uses_bounded_large_frame_limit():
+    text = (ROOT / "app" / "workers" / "m6j_polymarket_research.py").read_text()
+    assert "max_size=4 * 1024 * 1024" in text
+    assert "max_size=None" not in text
