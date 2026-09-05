@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from decimal import Decimal
-from math import sqrt
 from typing import Iterable, Sequence
 
 from app.venues.polymarket import EventContext, MarketContext, OrderBook, walk_buy
@@ -117,7 +117,7 @@ def hyperliquid_persistence_metrics(
     if rates:
         mean_rate = sum(rates, ZERO) / Decimal(len(rates))
         variance = sum((rate - mean_rate) ** 2 for rate in rates) / Decimal(len(rates))
-        stddev = Decimal(str(sqrt(float(variance))))
+        stddev = variance.sqrt()
         mean_edge = sum(edges, ZERO) / Decimal(len(edges))
         min_edge = min(edges)
         max_edge = max(edges)
@@ -197,7 +197,7 @@ def polymarket_negrisk_yes_consistency(
     event: EventContext,
     books: dict[str, OrderBook],
     *,
-    now,
+    now: datetime,
     max_shares: Decimal,
     max_book_age_seconds: int,
     fee_buffer_pct: Decimal,
@@ -215,9 +215,9 @@ def polymarket_negrisk_yes_consistency(
         return None, ("NOT_NEG_RISK",)
     if event.neg_risk_augmented:
         return None, ("AUGMENTED_NEG_RISK_DEFERRED",)
-    markets = [market for market in event.markets if market.is_tradeable_binary]
-    if len(markets) < 3:
+    if len(event.markets) < 3 or any(not market.is_tradeable_binary for market in event.markets):
         return None, ("INCOMPLETE_NEG_RISK_EVENT",)
+    markets = list(event.markets)
     if any(
         market.neg_risk_other
         or (market.group_item_title and market.group_item_title.strip().lower() == "other")
