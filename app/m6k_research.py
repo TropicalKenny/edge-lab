@@ -14,6 +14,7 @@ BPS = Decimal("10000")
 
 @dataclass(frozen=True)
 class HyperliquidPersistenceMetrics:
+    funding_point_count: int
     observation_count: int
     positive_edge_count: int
     baseline_edge_count: int
@@ -26,9 +27,9 @@ class HyperliquidPersistenceMetrics:
     funding_sign_flips: int
     mean_funding_hourly: Decimal | None
     funding_stddev_hourly: Decimal | None
-    mean_projected_edge_bps: Decimal | None
-    min_projected_edge_bps: Decimal | None
-    max_projected_edge_bps: Decimal | None
+    mean_window_edge_bps: Decimal | None
+    min_window_edge_bps: Decimal | None
+    max_window_edge_bps: Decimal | None
 
 
 @dataclass(frozen=True)
@@ -66,11 +67,12 @@ def hyperliquid_persistence_metrics(
     baseline_edge_bps: Decimal = Decimal("10"),
     stress_cost_multiplier: Decimal = Decimal("2"),
 ) -> HyperliquidPersistenceMetrics:
-    """Summarize historical funding persistence without creating trading evidence.
+    """Summarize actual historical rolling funding windows.
 
-    Each funding observation is projected across the proposed holding horizon only as a
-    counterfactual screen. The result is research telemetry, not a claim that the future
-    funding rate will persist for that horizon.
+    Unlike the M6J current-rate projection, each completed M6K window sums the funding
+    rates that were actually observed across that historical holding horizon, then deducts
+    the frozen round-trip cost model once. Windows overlap and therefore are *not*
+    independent trade samples; this is a persistence/regime screen only.
     """
 
     if horizon_hours <= 0:
@@ -83,11 +85,20 @@ def hyperliquid_persistence_metrics(
         raise ValueError("stress_cost_multiplier must be >= 1")
 
     rates = [Decimal(value) for value in funding_rates]
-    edges = [rate * Decimal(horizon_hours) * BPS - estimated_cost_bps for rate in rates]
-    stressed = [
-        rate * Decimal(horizon_hours) * BPS - estimated_cost_bps * stress_cost_multiplier
-        for rate in rates
-    ]
+    edges: list[Decimal] = []
+    stressed: list[Decimal] = []
+    if len(rates) >= horizon_hours:
+        rolling_sum = sum(rates[:horizon_hours], ZERO)
+        edges.append(rolling_sum * BPS - estimated_cost_bps)
+        stressed.append(
+            rolling_sum * BPS - estimated_cost_bps * stress_cost_multiplier
+        )
+        for index in range(horizon_hours, len(rates)):
+            rolling_sum += rates[index] - rates[index - horizon_hours]
+            edges.append(rolling_sum * BPS - estimated_cost_bps)
+            stressed.append(
+                rolling_sum * BPS - estimated_cost_bps * stress_cost_multiplier
+            )
 
     positive_count = sum(edge > ZERO for edge in edges)
     baseline_count = sum(edge >= baseline_edge_bps for edge in edges)
@@ -113,17 +124,20 @@ def hyperliquid_persistence_metrics(
 
     mean_rate = None
     stddev = None
-    mean_edge = min_edge = max_edge = None
     if rates:
         mean_rate = sum(rates, ZERO) / Decimal(len(rates))
         variance = sum((rate - mean_rate) ** 2 for rate in rates) / Decimal(len(rates))
         stddev = variance.sqrt()
+
+    mean_edge = min_edge = max_edge = None
+    if edges:
         mean_edge = sum(edges, ZERO) / Decimal(len(edges))
         min_edge = min(edges)
         max_edge = max(edges)
 
-    count = len(rates)
+    count = len(edges)
     return HyperliquidPersistenceMetrics(
+        funding_point_count=len(rates),
         observation_count=count,
         positive_edge_count=positive_count,
         baseline_edge_count=baseline_count,
@@ -136,9 +150,9 @@ def hyperliquid_persistence_metrics(
         funding_sign_flips=sign_flips,
         mean_funding_hourly=mean_rate,
         funding_stddev_hourly=stddev,
-        mean_projected_edge_bps=mean_edge,
-        min_projected_edge_bps=min_edge,
-        max_projected_edge_bps=max_edge,
+        mean_window_edge_bps=mean_edge,
+        min_window_edge_bps=min_edge,
+        max_window_edge_bps=max_edge,
     )
 
 
