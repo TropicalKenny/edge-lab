@@ -59,6 +59,7 @@ docker compose \
     hyperliquid-collector hyperliquid-forward-bootstrap hyperliquid-forward-runner \
     polymarket-collector polymarket-forward-bootstrap polymarket-forward-runner \
     solana-launch-collector solana-forensic-sampler solana-forward-bootstrap solana-forward-runner \
+    m6l-solana-bootstrap m6l-solana-runner \
     m6j-hyperliquid-research m6j-polymarket-research m6j-solana-research \
     forward-evaluator db-backup
 

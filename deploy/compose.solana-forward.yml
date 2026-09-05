@@ -96,3 +96,58 @@ services:
       retries: 3
       start_period: 180s
     restart: unless-stopped
+
+  m6l-solana-bootstrap:
+    profiles: ["solana"]
+    build: .
+    command: ["python", "-m", "app.workers.solana_meme_forward_bootstrap"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://edge:${POSTGRES_PASSWORD}@postgres:5432/edge
+      SIGNER_ENABLED: "false"
+      EVALUATION_MIN_FORWARD_DAYS: ${EVALUATION_MIN_FORWARD_DAYS:-90}
+      EVALUATION_MIN_NAV_OBSERVATIONS: ${EVALUATION_MIN_NAV_OBSERVATIONS:-60}
+      EVALUATION_MIN_SHADOW_OBSERVATIONS: ${EVALUATION_MIN_SHADOW_OBSERVATIONS:-30}
+      EVALUATION_MIN_TRADES_DEFAULT: ${EVALUATION_MIN_TRADES_DEFAULT:-100}
+      EVALUATION_MIN_TRADES_FUNDING: ${EVALUATION_MIN_TRADES_FUNDING:-60}
+      EVALUATION_MIN_TRADES_DIRECTIONAL: ${EVALUATION_MIN_TRADES_DIRECTIONAL:-100}
+      EVALUATION_MIN_TRADES_MEME: ${EVALUATION_MIN_TRADES_MEME:-300}
+      EVALUATION_MIN_FORECASTS_PREDICTION: ${EVALUATION_MIN_FORECASTS_PREDICTION:-50}
+      EVALUATION_MAX_DRAWDOWN_PCT: ${EVALUATION_MAX_DRAWDOWN_PCT:-0.15}
+      EVALUATION_MIN_PROFIT_FACTOR: ${EVALUATION_MIN_PROFIT_FACTOR:-1.30}
+      EVALUATION_MAX_TOP3_PROFIT_CONCENTRATION: ${EVALUATION_MAX_TOP3_PROFIT_CONCENTRATION:-0.50}
+      EVALUATION_COST_STRESS_MULTIPLIER: ${EVALUATION_COST_STRESS_MULTIPLIER:-2.0}
+      EVALUATION_MIN_SHADOW_FILL_RATIO: ${EVALUATION_MIN_SHADOW_FILL_RATIO:-0.90}
+      EVALUATION_MAX_SHADOW_P90_PRICE_DIVERGENCE_BPS: ${EVALUATION_MAX_SHADOW_P90_PRICE_DIVERGENCE_BPS:-50}
+      EVALUATION_MAX_PREDICTION_CALIBRATION_ERROR: ${EVALUATION_MAX_PREDICTION_CALIBRATION_ERROR:-0.10}
+      EVALUATION_MAX_NAV_GAP_DAYS: ${EVALUATION_MAX_NAV_GAP_DAYS:-3.0}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: "no"
+
+  m6l-solana-runner:
+    profiles: ["solana"]
+    build: .
+    command: ["python", "-m", "app.workers.solana_meme_forward_runner"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://edge:${POSTGRES_PASSWORD}@postgres:5432/edge
+      REDIS_URL: redis://redis:6379/0
+      SIGNER_ENABLED: "false"
+      SOLANA_RPC_HTTP_URL: ${SOLANA_RPC_HTTP_URL:-}
+      SOLANA_RPC_COMMITMENT: ${SOLANA_RPC_COMMITMENT:-confirmed}
+      SOLANA_RPC_TIMEOUT_SECONDS: ${SOLANA_RPC_TIMEOUT_SECONDS:-10}
+      HELIUS_API_KEY: ${HELIUS_API_KEY:-}
+      JUPITER_API_KEY: ${JUPITER_API_KEY:?set JUPITER_API_KEY}
+      GOPLUS_ACCESS_TOKEN: ${GOPLUS_ACCESS_TOKEN:-}
+      SOLANA_FORWARD_POLL_SECONDS: ${SOLANA_FORWARD_POLL_SECONDS:-60}
+      SOLANA_FORWARD_HEALTH_MAX_NAV_AGE_SECONDS: ${SOLANA_FORWARD_HEALTH_MAX_NAV_AGE_SECONDS:-900}
+    depends_on:
+      m6l-solana-bootstrap:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "python -m app.solana_meme_forward_ops status --require-ready --quiet"]
+      interval: 60s
+      timeout: 20s
+      retries: 3
+      start_period: 180s
+    restart: unless-stopped
