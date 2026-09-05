@@ -1,0 +1,67 @@
+name: Finalize M6K source docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/tmp-m6k-docs-finalize.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Update source-of-truth documentation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          runtime_sha = '957d456e8a70d7ec13984bd350cfd94961dc7820'
+          old_sha = 'f454e7fb64eb117278fcc8f1def1153d896cf39e'
+          marker = '<!-- M6K_DEPLOYED_2026_09_05 -->'
+
+          project = Path('docs/PROJECT_SOURCE.md')
+          text = project.read_text()
+          text = text.replace('Last updated: 3 September 2026, Africa/Lagos', 'Last updated: 5 September 2026, Africa/Lagos', 1)
+          old = f'''Verified deployed runtime code revision:\n\n`{old_sha}`\n\nThat revision is PR #49, `feat: add Telegram paper trade and daily heartbeat alerts`.'''
+          new = f'''Verified deployed runtime code revision:\n\n`{runtime_sha}`\n\nThat revision is the M6K Stage 2 observation-research deployment from PR #55, `feat: add M6K stage 2 observation research`. PR #49's Telegram paper/shadow alerts remain in the runtime lineage.'''
+          if old in text:
+              text = text.replace(old, new, 1)
+          if marker not in text:
+              anchor = '## Product purpose and immutable current safety boundary'
+              block = f'''{marker}\n### Settled live verification — 5 September 2026 — M6K Stage 2\n\nM6K Stage 2 observation research is merged and deployed on the VPS at `{runtime_sha}`. It reuses the existing M6J research worker processes while writing analytically isolated `m6k-hl`, `m6k-pm`, and `m6k-sol` telemetry lanes. The frozen M6C, M6F, and M6G studies were not replaced or retuned.\n\nVerification/deployment evidence:\n\n- PR #55 merged to `main`;\n- M6K CI run `33974524827`: success;\n- pre-deployment status run `33974567822`: success;\n- VPS source update run `33974625579`: success;\n- full deployment preflight run `33974710976`: success;\n- full restart/deployment run `33974762226`: success;\n- post-deploy status run `33974939606`: success;\n- post-deploy research snapshot run `33974974828`: success.\n\nPost-deploy status verified:\n\n- exact VPS SHA `{runtime_sha}` on `main`;\n- Hyperliquid, Polymarket, and Solana forward runners Docker-healthy;\n- all observed restart counts `0`, including the three M6J/M6K research workers;\n- dashboard healthy on `127.0.0.1:8080`;\n- private owner-control healthy on `127.0.0.1:8090`;\n- Telegram safe 14-command menu intact;\n- `SIGNER_ENABLED=false`;\n- no M6J/M6K research worker exposes a public port.\n\nThe read-only snapshot captured at `2026-09-05T15:30:06Z` verified all three frozen studies operationally `ready`, aggregate simulated NAV `$3,000`, net P&L `$0`, zero closed trades, zero execution observations, zero permanent data-integrity incidents, and zero contaminated studies. Seven unresolved incident rows remain historical/non-data-integrity provider/parser audit history; none was critical at capture time.\n\nInitial M6K telemetry after restart:\n\n- `m6k-hl`: tracking active; 4 coin/horizon screens examined, 1 passed and 3 rejected. A screen pass only nominates a separately registered future hypothesis and does not promote M6C.\n- `m6k-pm`: worker running with zero restarts, but no eligible event-consistency observation had been durably recorded yet at the first post-restart snapshot. Do not interpret `tracking=false` at that early capture as a baseline venue outage; the Polymarket forward runner was healthy/ready.\n- `m6k-sol`: tracking active; 4 research cycles recorded, with no new UNKNOWN entry/outcome/resolution records yet in the short post-restart window. UNKNOWN remains non-promotional and never becomes historical SAFE by hindsight.\n\nThe snapshot safety contract remained explicit: `can_trade_live=false`, `can_sign=false`, `can_move_funds=false`, `wallet_access=false`, `shell_access=false`, `signer_enabled=false`, and live capital `$0`.\n\nSee `docs/MILESTONE6K.md` for the preregistered M6K research rules and advancement boundary.\n\n'''
+              if anchor not in text:
+                  raise SystemExit('PROJECT_SOURCE anchor missing')
+              text = text.replace(anchor, block + anchor, 1)
+          project.write_text(text)
+
+          handoff = Path('docs/DEPLOYMENT_HANDOFF.md')
+          text = handoff.read_text()
+          text = text.replace('Last updated: 3 September 2026, Africa/Lagos.', 'Last updated: 5 September 2026, Africa/Lagos.', 1)
+          old = f'''Verified deployed runtime code revision:\n\n`{old_sha}`\n\nPR #49: `feat: add Telegram paper trade and daily heartbeat alerts`.'''
+          new = f'''Verified deployed runtime code revision:\n\n`{runtime_sha}`\n\nPR #55: `feat: add M6K stage 2 observation research`. PR #49's Telegram paper/shadow alert work remains included in this runtime lineage.'''
+          if old in text:
+              text = text.replace(old, new, 1)
+          if marker not in text:
+              anchor = '## Current safety boundary'
+              block = f'''{marker}\n### M6K production research deployment — 5 September 2026\n\nThe full research stack was updated, preflighted, rebuilt, restarted, and reverified at `{runtime_sha}` through the Aurent typed VPS gateway. M6K is observation-only and runs inside the existing M6J research worker services, writing separate `m6k-hl`, `m6k-pm`, and `m6k-sol` telemetry.\n\nOperational run chain:\n\n- M6K CI `33974524827` — success;\n- pre-deploy status `33974567822` — success;\n- VPS fast-forward update `33974625579` — success;\n- full preflight `33974710976` — success;\n- full restart `33974762226` — success;\n- settled post-deploy status `33974939606` — success;\n- read-only research snapshot `33974974828` — success.\n\nSettled status showed the three forward runners healthy, the dashboard and owner-control surfaces healthy, all observed container restart counts at `0`, the safe Telegram menu unchanged, and `signer_enabled=false`. The three M6J research containers that now carry M6K logic were all up with zero restarts and no public ports.\n\nThe first post-restart snapshot showed all frozen forward studies operationally `ready`. `m6k-hl` was already collecting and screened four coin/horizon pairs (one screen pass, three rejects); `m6k-sol` had begun cycling but had not yet seen a new UNKNOWN record; `m6k-pm` had not yet durably recorded its first eligible event-consistency observation in the short post-restart window. These are research collection states, not trading/promotional states.\n\nThe safety object remained fully fail-closed: no live trading, signing, fund movement, wallet access, or shell access, with live capital `$0`.\n\nDetailed M6K rules are in `docs/MILESTONE6K.md`.\n\n'''
+              if anchor not in text:
+                  raise SystemExit('DEPLOYMENT_HANDOFF anchor missing')
+              text = text.replace(anchor, block + anchor, 1)
+          handoff.write_text(text)
+          PY
+
+          git config user.name 'TropicalKenny'
+          git config user.email '138382176+TropicalKenny@users.noreply.github.com'
+          git rm .github/workflows/tmp-m6k-docs-finalize.yml
+          git add docs/PROJECT_SOURCE.md docs/DEPLOYMENT_HANDOFF.md
+          git diff --cached --check
+          git commit -m 'docs: record verified M6K deployment'
+          git push origin HEAD:main
