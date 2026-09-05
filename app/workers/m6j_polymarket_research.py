@@ -15,6 +15,7 @@ from sqlalchemy import select
 from app.config import get_settings
 from app.database import get_session_factory
 from app.forward_models import ForwardStudy
+from app.m6k_research import polymarket_negrisk_yes_consistency
 from app.polymarket_research import PolymarketResearchService
 from app.research_acceleration import polymarket_book_from_ws
 from app.scan_telemetry import record_scan_observation
@@ -135,6 +136,24 @@ def _opportunity_key(opportunity: StructuralOpportunity, books: dict[str, OrderB
     return hashlib.sha256(raw.encode()).hexdigest()[:24]
 
 
+def _event_state_key(event: EventContext, books: dict[str, OrderBook]) -> str:
+    state = [event.event_id]
+    for market in sorted(event.markets, key=lambda item: item.market_id):
+        token = market.yes_token_id or ""
+        book = books.get(token)
+        state.append(
+            "|".join(
+                [
+                    market.market_id,
+                    token,
+                    str(book.book_hash if book else ""),
+                    str(book.timestamp.isoformat() if book else ""),
+                ]
+            )
+        )
+    return hashlib.sha256("|".join(state).encode()).hexdigest()[:24]
+
+
 def _record_opportunity(
     study_id: str,
     opportunity: StructuralOpportunity,
@@ -169,6 +188,72 @@ def _record_opportunity(
         db.close()
 
 
+def _record_event_consistency(
+    study_id: str,
+    event: EventContext,
+    books: dict[str, OrderBook],
+    *,
+    now: datetime,
+) -> tuple[bool, bool, tuple[str, ...]]:
+    settings = get_settings()
+    observation, reasons = polymarket_negrisk_yes_consistency(
+        event,
+        books,
+        now=now,
+        max_shares=Decimal(str(settings.polymarket_max_shares_per_opportunity)),
+        max_book_age_seconds=settings.m6j_polymarket_max_book_age_seconds,
+        fee_buffer_pct=Decimal(str(settings.polymarket_forward_fee_buffer_pct)),
+        baseline_edge_bps=Decimal(str(settings.m6k_polymarket_baseline_edge_bps)),
+    )
+    if observation is None:
+        return False, False, reasons
+
+    SessionLocal = get_session_factory()
+    db = SessionLocal()
+    try:
+        state_key = _event_state_key(event, books)
+        record_scan_observation(
+            db,
+            study_id=study_id,
+            external_key=f"m6k:pm:event-consistency:{event.event_id}:{state_key}",
+            observation_kind="candidate",
+            observed_at=now,
+            rejection_reasons=(
+                {}
+                if observation.positive_violation
+                else {"NO_POSITIVE_EVENT_CONSISTENCY_GAP": 1}
+            ),
+            metadata={
+                "research_lane": "m6k-pm",
+                "research_mode": "metadata_invariant_public_book_observation_only",
+                "screen_version": "m6k-pm-v1",
+                "relationship_type": "standard_negrisk_yes_complete_set",
+                "relationship_source": "explicit_negrisk_event_metadata",
+                "event_id": observation.event_id,
+                "market_count": observation.market_count,
+                "quantity": str(observation.quantity),
+                "gross_cost_usd": str(observation.gross_cost),
+                "total_fees_usd": str(observation.total_fees),
+                "total_cost_usd": str(observation.total_cost),
+                "deterministic_resolution_payout_usd": str(observation.payout),
+                "gap_usd": str(observation.gap_usd),
+                "gap_bps": str(observation.gap_bps),
+                "positive_violation": observation.positive_violation,
+                "baseline_edge_qualified": observation.baseline_edge_qualified,
+                "baseline_edge_bps": str(settings.m6k_polymarket_baseline_edge_bps),
+                "state_key": state_key,
+                "duration_semantics": (
+                    "infer-from-consecutive-unique-book-state-observations"
+                ),
+                "uses_resolved_outcome": False,
+                "semantic_llm_relationship_inference": False,
+            },
+        )
+    finally:
+        db.close()
+    return True, observation.positive_violation, ()
+
+
 def _record_summary(
     study_id: str,
     *,
@@ -185,6 +270,11 @@ def _record_summary(
     markets: int,
     events: int,
     subscribed_assets: int,
+    m6k_checks: int,
+    m6k_valid: int,
+    m6k_positive: int,
+    m6k_baseline: int,
+    m6k_rejections: Counter[str],
 ) -> None:
     settings = get_settings()
     SessionLocal = get_session_factory()
@@ -217,6 +307,27 @@ def _record_summary(
                 "m6j_assets_subscribed": subscribed_assets,
             },
         )
+        if settings.m6k_enabled:
+            record_scan_observation(
+                db,
+                study_id=study_id,
+                external_key=f"m6k:pm:cycle:{bucket}",
+                observation_kind="cycle",
+                observed_at=started_at,
+                examined_count=m6k_checks,
+                accepted_count=m6k_positive,
+                rejected_count=max(0, m6k_checks - m6k_positive),
+                rejection_reasons=dict(m6k_rejections),
+                metadata={
+                    "research_lane": "m6k-pm",
+                    "research_mode": "metadata_invariant_public_book_observation_only",
+                    "screen_version": "m6k-pm-v1",
+                    "m6k_pm_event_checks": m6k_checks,
+                    "m6k_pm_valid_observations": m6k_valid,
+                    "m6k_pm_positive_violations": m6k_positive,
+                    "m6k_pm_baseline_qualified": m6k_baseline,
+                },
+            )
     finally:
         db.close()
 
@@ -252,7 +363,9 @@ async def _stream_once(client: PolymarketPublicClient, study_id: str) -> None:
 
     messages = book_events = checks = positive_checks = positive_edges = baseline_edges = 0
     binary_checks = negrisk_checks = 0
+    m6k_checks = m6k_valid = m6k_positive = m6k_baseline = 0
     rejection_counts: Counter[str] = Counter(discovery_rejections)
+    m6k_rejections: Counter[str] = Counter()
     summary_started = datetime.now(timezone.utc)
     connected_at = time.monotonic()
 
@@ -313,12 +426,13 @@ async def _stream_once(client: PolymarketPublicClient, study_id: str) -> None:
 
                 event = event_by_token.get(asset_id)
                 if event is not None:
+                    event_now = datetime.now(timezone.utc)
                     checks += 1
                     negrisk_checks += 1
                     found, reasons = analyzer.neg_risk_event(
                         event,
                         books,
-                        now=datetime.now(timezone.utc),
+                        now=event_now,
                     )
                     if not found:
                         for reason, count in reasons.items():
@@ -330,6 +444,43 @@ async def _stream_once(client: PolymarketPublicClient, study_id: str) -> None:
                             positive_edges += edge_count
                             baseline_edges += baseline_count
                             _record_opportunity(study_id, opportunity, books)
+
+                    if settings.m6k_enabled:
+                        m6k_checks += 1
+                        valid, positive_gap, consistency_reasons = _record_event_consistency(
+                            study_id,
+                            event,
+                            books,
+                            now=event_now,
+                        )
+                        m6k_valid += int(valid)
+                        m6k_positive += int(positive_gap)
+                        if valid:
+                            observation, _ = polymarket_negrisk_yes_consistency(
+                                event,
+                                books,
+                                now=event_now,
+                                max_shares=Decimal(
+                                    str(settings.polymarket_max_shares_per_opportunity)
+                                ),
+                                max_book_age_seconds=(
+                                    settings.m6j_polymarket_max_book_age_seconds
+                                ),
+                                fee_buffer_pct=Decimal(
+                                    str(settings.polymarket_forward_fee_buffer_pct)
+                                ),
+                                baseline_edge_bps=Decimal(
+                                    str(settings.m6k_polymarket_baseline_edge_bps)
+                                ),
+                            )
+                            m6k_baseline += int(
+                                bool(observation and observation.baseline_edge_qualified)
+                            )
+                            if not positive_gap:
+                                m6k_rejections["NO_POSITIVE_EVENT_CONSISTENCY_GAP"] += 1
+                        else:
+                            for reason in consistency_reasons:
+                                m6k_rejections[str(reason)] += 1
 
             now = datetime.now(timezone.utc)
             if (now - summary_started).total_seconds() >= settings.m6j_polymarket_summary_seconds:
@@ -348,13 +499,20 @@ async def _stream_once(client: PolymarketPublicClient, study_id: str) -> None:
                     markets=len(markets),
                     events=len(events),
                     subscribed_assets=len(token_ids),
+                    m6k_checks=m6k_checks,
+                    m6k_valid=m6k_valid,
+                    m6k_positive=m6k_positive,
+                    m6k_baseline=m6k_baseline,
+                    m6k_rejections=m6k_rejections,
                 )
                 messages = book_events = checks = positive_checks = positive_edges = baseline_edges = 0
                 binary_checks = negrisk_checks = 0
+                m6k_checks = m6k_valid = m6k_positive = m6k_baseline = 0
                 rejection_counts = Counter()
+                m6k_rejections = Counter()
                 summary_started = now
 
-    if messages or book_events or checks:
+    if messages or book_events or checks or m6k_checks:
         _record_summary(
             study_id,
             started_at=summary_started,
@@ -370,6 +528,11 @@ async def _stream_once(client: PolymarketPublicClient, study_id: str) -> None:
             markets=len(markets),
             events=len(events),
             subscribed_assets=len(token_ids),
+            m6k_checks=m6k_checks,
+            m6k_valid=m6k_valid,
+            m6k_positive=m6k_positive,
+            m6k_baseline=m6k_baseline,
+            m6k_rejections=m6k_rejections,
         )
 
 
@@ -387,7 +550,7 @@ async def run() -> None:
             try:
                 await _stream_once(client, study_id)
             except Exception:
-                log.exception("M6J Polymarket websocket session failed")
+                log.exception("M6J/M6K Polymarket websocket session failed")
                 await asyncio.sleep(5)
 
 
