@@ -13,7 +13,9 @@ def test_m6j_compose_has_no_ports_and_forces_signer_off():
     assert "m6j-hyperliquid-research" in text
     assert "m6j-polymarket-research" in text
     assert "m6j-solana-research" in text
-    assert text.count("M6K_ENABLED:") == 3
+    assert sum(
+        line.strip().startswith("M6K_ENABLED:") for line in text.splitlines()
+    ) == 3
 
 
 def test_m6j_m6k_workers_expose_no_transaction_submission_surface():
