@@ -2,15 +2,15 @@
 
 Operational handoff for Edge Lab's **paper/shadow forward research** deployment. This document does not authorize live trading.
 
-Last updated: 3 September 2026, Africa/Lagos.
+Last updated: 5 September 2026, Africa/Lagos.
 
 ## Current live deployment
 
 Verified deployed runtime code revision:
 
-`f454e7fb64eb117278fcc8f1def1153d896cf39e`
+`957d456e8a70d7ec13984bd350cfd94961dc7820`
 
-PR #49: `feat: add Telegram paper trade and daily heartbeat alerts`.
+PR #55: `feat: add M6K stage 2 observation research`. PR #49's Telegram paper/shadow alert work remains included in this runtime lineage.
 
 VPS checkout:
 
@@ -33,6 +33,29 @@ Settled typed status run `33749858549` verified:
 - signer disabled.
 
 Post-alert research snapshot run `33749917961`, captured at `2026-09-03T11:29:11Z`, verified all three studies operationally `ready`, with no hard reasons or warnings and zero permanent data-integrity incidents. At that capture there were still zero open positions, zero closed trades, zero execution observations, `$3,000` aggregate simulated NAV and `$0` net P&L.
+
+<!-- M6K_DEPLOYED_2026_09_05 -->
+### M6K production research deployment — 5 September 2026
+
+The full research stack was updated, preflighted, rebuilt, restarted, and reverified at `957d456e8a70d7ec13984bd350cfd94961dc7820` through the Aurent typed VPS gateway. M6K is observation-only and runs inside the existing M6J research worker services, writing separate `m6k-hl`, `m6k-pm`, and `m6k-sol` telemetry.
+
+Operational run chain:
+
+- M6K CI `33974524827` — success;
+- pre-deploy status `33974567822` — success;
+- VPS fast-forward update `33974625579` — success;
+- full preflight `33974710976` — success;
+- full restart `33974762226` — success;
+- settled post-deploy status `33974939606` — success;
+- read-only research snapshot `33974974828` — success.
+
+Settled status showed the three forward runners healthy, the dashboard and owner-control surfaces healthy, all observed container restart counts at `0`, the safe Telegram menu unchanged, and `signer_enabled=false`. The three M6J research containers that now carry M6K logic were all up with zero restarts and no public ports.
+
+The first post-restart snapshot showed all frozen forward studies operationally `ready`. `m6k-hl` was already collecting and screened four coin/horizon pairs (one screen pass, three rejects); `m6k-sol` had begun cycling but had not yet seen a new UNKNOWN record; `m6k-pm` had not yet durably recorded its first eligible event-consistency observation in the short post-restart window. These are research collection states, not trading/promotional states.
+
+The safety object remained fully fail-closed: no live trading, signing, fund movement, wallet access, or shell access, with live capital `$0`.
+
+Detailed M6K rules are in `docs/MILESTONE6K.md`.
 
 ## Current safety boundary
 

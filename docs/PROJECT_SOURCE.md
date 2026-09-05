@@ -2,7 +2,7 @@
 
 Living project handoff for continuing Edge Lab across chats and agents.
 
-Last updated: 3 September 2026, Africa/Lagos
+Last updated: 5 September 2026, Africa/Lagos
 
 ## How every future chat/agent should use this document
 
@@ -24,9 +24,9 @@ VPS host: OVH, Ubuntu user `ubuntu`
 
 Verified deployed runtime code revision:
 
-`f454e7fb64eb117278fcc8f1def1153d896cf39e`
+`957d456e8a70d7ec13984bd350cfd94961dc7820`
 
-That revision is PR #49, `feat: add Telegram paper trade and daily heartbeat alerts`.
+That revision is the M6K Stage 2 observation-research deployment from PR #55, `feat: add M6K stage 2 observation research`. PR #49's Telegram paper/shadow alerts remain in the runtime lineage.
 
 Current `main` may become newer after documentation-only commits. Do not redeploy merely because documentation advances `main`; compare changed files first.
 
@@ -68,6 +68,45 @@ It also reported:
 - unresolved incidents: `6`, all historical non-data-integrity provider/parser errors fixed earlier the same day.
 
 Do not interpret those historical incidents as current venue failures when readiness is fresh and `ready`.
+
+<!-- M6K_DEPLOYED_2026_09_05 -->
+### Settled live verification — 5 September 2026 — M6K Stage 2
+
+M6K Stage 2 observation research is merged and deployed on the VPS at `957d456e8a70d7ec13984bd350cfd94961dc7820`. It reuses the existing M6J research worker processes while writing analytically isolated `m6k-hl`, `m6k-pm`, and `m6k-sol` telemetry lanes. The frozen M6C, M6F, and M6G studies were not replaced or retuned.
+
+Verification/deployment evidence:
+
+- PR #55 merged to `main`;
+- M6K CI run `33974524827`: success;
+- pre-deployment status run `33974567822`: success;
+- VPS source update run `33974625579`: success;
+- full deployment preflight run `33974710976`: success;
+- full restart/deployment run `33974762226`: success;
+- post-deploy status run `33974939606`: success;
+- post-deploy research snapshot run `33974974828`: success.
+
+Post-deploy status verified:
+
+- exact VPS SHA `957d456e8a70d7ec13984bd350cfd94961dc7820` on `main`;
+- Hyperliquid, Polymarket, and Solana forward runners Docker-healthy;
+- all observed restart counts `0`, including the three M6J/M6K research workers;
+- dashboard healthy on `127.0.0.1:8080`;
+- private owner-control healthy on `127.0.0.1:8090`;
+- Telegram safe 14-command menu intact;
+- `SIGNER_ENABLED=false`;
+- no M6J/M6K research worker exposes a public port.
+
+The read-only snapshot captured at `2026-09-05T15:30:06Z` verified all three frozen studies operationally `ready`, aggregate simulated NAV `$3,000`, net P&L `$0`, zero closed trades, zero execution observations, zero permanent data-integrity incidents, and zero contaminated studies. Seven unresolved incident rows remain historical/non-data-integrity provider/parser audit history; none was critical at capture time.
+
+Initial M6K telemetry after restart:
+
+- `m6k-hl`: tracking active; 4 coin/horizon screens examined, 1 passed and 3 rejected. A screen pass only nominates a separately registered future hypothesis and does not promote M6C.
+- `m6k-pm`: worker running with zero restarts, but no eligible event-consistency observation had been durably recorded yet at the first post-restart snapshot. Do not interpret `tracking=false` at that early capture as a baseline venue outage; the Polymarket forward runner was healthy/ready.
+- `m6k-sol`: tracking active; 4 research cycles recorded, with no new UNKNOWN entry/outcome/resolution records yet in the short post-restart window. UNKNOWN remains non-promotional and never becomes historical SAFE by hindsight.
+
+The snapshot safety contract remained explicit: `can_trade_live=false`, `can_sign=false`, `can_move_funds=false`, `wallet_access=false`, `shell_access=false`, `signer_enabled=false`, and live capital `$0`.
+
+See `docs/MILESTONE6K.md` for the preregistered M6K research rules and advancement boundary.
 
 ## Product purpose and immutable current safety boundary
 
