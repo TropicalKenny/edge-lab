@@ -93,9 +93,10 @@ async def run() -> None:
             raise
         except Exception:
             log.exception("M6L Solana paper cycle failed")
-        await asyncio.sleep(settings.solana_forward_poll_seconds)
+        await asyncio.sleep(min(settings.solana_forward_poll_seconds, 15))
 
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     asyncio.run(run())
+

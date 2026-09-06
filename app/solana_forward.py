@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
@@ -281,15 +282,21 @@ class SolanaLaunchBaselineForwardRunner:
         message: str,
         data_integrity: bool,
     ) -> None:
+        fingerprint = hashlib.sha256(f"{severity}:{data_integrity}:{message}".encode()).hexdigest()[:16]
         bucket = int(_aware(now).timestamp() // 3600)
+        key = f"solana-forward:{code}:{bucket}:{fingerprint}"
+        existing = db.scalar(select(ForwardStudyIncident).where(
+            ForwardStudyIncident.study_id == study.id, ForwardStudyIncident.external_key == key
+        ))
+        opened_at = _aware(existing.opened_at) if existing is not None else _aware(now)
         ForwardResearchService.record_incident(
             db,
             study_id=study.id,
-            external_key=f"solana-forward:{code}:{bucket}",
+            external_key=key,
             severity=severity,
             code=code,
             message=message,
-            opened_at=_aware(now),
+            opened_at=opened_at,
             data_integrity=data_integrity,
         )
 
@@ -1318,3 +1325,4 @@ class SolanaLaunchBaselineForwardRunner:
                     )
                 )
         return results
+

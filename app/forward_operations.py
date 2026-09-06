@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.config import Settings
 from app.evaluation import EvaluationPolicy
-from app.evaluation_models import StrategyEvaluationRun
+from app.evaluation_lookup import latest_study_evaluation
 from app.forward_models import (
     ForwardExecutionRecord,
     ForwardNavObservation,
@@ -431,16 +431,8 @@ class ForwardOperationsService:
         ).all()
         ticks: list[EvaluationTick] = []
         for study in studies:
-            existing = db.scalar(
-                select(StrategyEvaluationRun.id).where(
-                    StrategyEvaluationRun.strategy_version_id
-                    == study.strategy_version_id,
-                    StrategyEvaluationRun.forward_started_at == study.started_at,
-                    StrategyEvaluationRun.evaluated_at >= day_start,
-                    StrategyEvaluationRun.evaluated_at < day_end,
-                )
-            )
-            if existing is not None:
+            existing = latest_study_evaluation(db, study)
+            if existing is not None and day_start <= _aware(existing.evaluated_at) < day_end:
                 ticks.append(
                     EvaluationTick(
                         study.id,
@@ -556,16 +548,7 @@ class ForwardOperationsService:
                 .order_by(HyperliquidFundingSnapshot.funding_time.desc())
                 .limit(1)
             )
-            latest_evaluation = db.scalar(
-                select(StrategyEvaluationRun)
-                .where(
-                    StrategyEvaluationRun.strategy_version_id
-                    == study.strategy_version_id,
-                    StrategyEvaluationRun.forward_started_at == study.started_at,
-                )
-                .order_by(StrategyEvaluationRun.evaluated_at.desc())
-                .limit(1)
-            )
+            latest_evaluation = latest_study_evaluation(db, study)
 
             hard_reasons: list[str] = []
             warnings: list[str] = []
@@ -672,3 +655,4 @@ class ForwardOperationsService:
                 }
             )
         return reports
+

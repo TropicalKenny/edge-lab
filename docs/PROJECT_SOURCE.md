@@ -528,3 +528,30 @@ Next work should proceed in parallel with uninterrupted evidence collection:
 6. Do not relax GREEN evidence gates merely because time has passed. The strongest automated state remains recommendation-only.
 7. The next build item is publishing the read-only dashboard behind owner-only Cloudflare Access; after that, add the authenticated browser mutation adapter if the owner wants web control.
 8. Keep live trading/signing/fund movement out of scope until a separately authorized micro-live security milestone.
+
+## Reliability repair — 6 September 2026
+
+Owner authorized autonomous paper-research repairs and deployment. Live signing and real capital remain disabled.
+
+Pre-repair live verification: Aurent runs `34008504040` (research snapshot, 03:14 UTC) and `34008533960` (runtime status). VPS/main revision `73c7166b72f1f9595472a98c84ebb548e16f2138`. Five active studies; exploratory M6L-v1 had five closed losses, realized P&L -54.6717262635 USD and marked NAV 944.2970473692 USD. These results must remain visible.
+
+Implemented repair:
+
+- Stable incident retry identity and first-observation timestamps; NAV quote errors cannot produce conflicting timestamp retries.
+- Mandatory momentum and available volume-acceleration checks now match the written alpha contract.
+- New `m6l-v2` strict/exploratory studies separate corrected entries from historical v1 evidence. Existing v1 studies accept no new entries, retain their original exits, and complete only after positions are reconciled/closed. No historical loss or journal row is deleted or reclassified.
+- All M6L cohort exits and NAV checks run before candidate enrichment; candidate scans have a ten-second between-candidate budget. M6L worker polling sleep is capped at 15 seconds. This is not a guaranteed 15-second execution latency: provider requests and sequential positions still take time.
+- V2 full-size quote-valid exits may record adverse price impact up to 100%; the 8% entry impact gate remains. This avoids confusing an expensive executable exit with no route. Stops remain triggers, not guaranteed fills. No-route deadline losses remain zero recovery.
+- Executable mark telemetry is separate from candidate counts and keyed by actual quote timestamp.
+- Evaluation records carry study identity; the daily scheduler and dashboard no longer confuse same-version, same-start cohorts. Ambiguous old evaluations are not guessed.
+- Lifetime drawdown uses the entire NAV history; chart output stays limited to 60 points. Existing fraction units remain compatible and are explicitly labeled. Realized/total/unrealized P&L and NAV timestamps are exposed separately.
+- Unresolved incident count uses all rows rather than the 20-row display cap.
+- M6L reports use the same journal/config/NAV/integrity health checks as other Solana studies. UI identifies cohorts and evaluations with newer trades.
+
+Validation: all 260 tests passed, including nine new regression tests; Python compilation, shell syntax, and fresh Alembic migration passed. Local Docker Compose rendering was unavailable; final GitHub validation and live deployment verification remain required before marking this repair deployed. No database schema migration or manual production SQL is introduced.
+
+Research decision: prioritize correctness and versioned forward evidence over adding more strategies. Jupiter documentation confirms quote-only pricing without a taker is supported, but a quote is still not an executed transaction: https://dev.jup.ag/docs/guides/how-to-build-a-swap-with-ultra . No profitability claim follows from quote simulations. Polymarket synchronized-book acquisition remains a separate research task; its stale-book rejection counts are not a reason to force simulated trades.
+
+Outstanding beyond this repair: verified external dashboard/OTP journey, email-provider configuration (missing in inspected Edge Lab environment), backup restore drill, and sustained forward results from v2. Do not describe the whole product as finished or profitable.
+
+Deployment status: prepared and locally verified; post-deployment evidence must be appended below.

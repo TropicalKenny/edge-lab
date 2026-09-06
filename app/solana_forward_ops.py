@@ -58,13 +58,14 @@ def study_statuses(
     *,
     settings: Settings,
     external_id: str | None = None,
+    include_meme: bool = False,
     now: datetime | None = None,
 ) -> list[dict[str, Any]]:
     now = _aware(now or datetime.now(timezone.utc))
     query = select(ForwardStudy).where(
         ForwardStudy.venue == "solana",
         ForwardStudy.family == "meme",
-        ForwardStudy.instrument == INSTRUMENT,
+        ForwardStudy.instrument.in_([INSTRUMENT, "PUMP_MOMENTUM_M6L"] if include_meme else [INSTRUMENT]),
     )
     if external_id:
         query = query.where(ForwardStudy.external_id == external_id)
@@ -72,6 +73,7 @@ def study_statuses(
     reports: list[dict[str, Any]] = []
 
     for study in studies:
+        is_meme = study.instrument == "PUMP_MOMENTUM_M6L"
         version = db.get(StrategyVersion, study.strategy_version_id)
         strategy = db.get(Strategy, version.strategy_id) if version is not None else None
         initial_nav = db.scalar(
@@ -147,11 +149,20 @@ def study_statuses(
         if version is None or not version.immutable:
             hard_reasons.append("STRATEGY_VERSION_MISSING_OR_MUTABLE")
         else:
-            if version.version != STRATEGY_VERSION or version.code_sha != CORE_RUNNER_CODE_SHA:
+            if is_meme:
+                from app.solana_meme_forward import M6LMemeConfig
+                try:
+                    M6LMemeConfig.from_study(study)
+                except (ValueError, RuntimeError) as exc:
+                    hard_reasons.append(f"FROZEN_CONFIG_INVALID:{exc}")
+                expected_code = {"m6l-v1": "m6l-solana-meme-momentum-v1", "m6l-v2": "m6l-solana-meme-momentum-v2"}
+                if version.code_sha != expected_code.get(version.version, "invalid"):
+                    hard_reasons.append("STRATEGY_LINEAGE_MISMATCH")
+            elif version.version != STRATEGY_VERSION or version.code_sha != CORE_RUNNER_CODE_SHA:
                 hard_reasons.append("STRATEGY_LINEAGE_MISMATCH")
         if strategy is None:
             hard_reasons.append("STRATEGY_MISSING")
-        elif strategy.slug != STRATEGY_SLUG:
+        elif strategy.slug != ("solana-pump-momentum-paper" if is_meme else STRATEGY_SLUG):
             hard_reasons.append("STRATEGY_SLUG_MISMATCH")
         if integrity_failures:
             hard_reasons.append("DATA_INTEGRITY_CONTAMINATED")
@@ -294,3 +305,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
