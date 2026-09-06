@@ -151,3 +151,28 @@ def test_missing_exit_route_is_zero_recovery_only_after_deadline():
     runner._trade_from_exit_metadata=lambda *a:None
     assert asyncio.run(runner._exit_due_positions(db,study,SolanaForwardConfig.from_study(study),now=now))==(1,0)
     assert calls[0]['status']=='forced_loss' and calls[0]['shadow'] is None
+
+
+def test_atomic_token_prices_persist_and_legacy_quotes_remain_evaluable():
+    from app.forward_research import _evaluation_price
+    db,now,_,studies=fixture()
+    row=ForwardResearchService.record_execution(db,study_id=studies[1].id,external_key='tiny',
+        observed_at=now,side='buy',intended_quantity=D('25'),paper_filled_quantity=D('25'),
+        shadow_filled_quantity=D('25'),paper_average_price=D('2.5e-15'),shadow_average_price=D('2.4e-15'),
+        metadata={'phase':'entry','paper_quote':{'in_usd_value':'25','out_amount':10**16},
+                  'shadow_quote':{'in_usd_value':'24','out_amount':10**16}})
+    assert row.paper_average_price > 0
+    # Simulate an already persisted pre-migration row; evaluation must not rewrite it.
+    row.paper_average_price=D('0');row.shadow_average_price=D('0');db.commit()
+    assert _evaluation_price(row,'paper')==D('2.5e-15')
+    assert _evaluation_price(row,'shadow')==D('2.4e-15')
+    ForwardResearchService.evaluate_study(db,study_id=studies[1].id,evaluated_at=now+timedelta(minutes=1))
+    db.refresh(row);assert row.paper_average_price==0
+
+
+def test_unexplained_zero_execution_price_still_fails_closed():
+    import pytest
+    from app.forward_research import _evaluation_price, ForwardResearchError
+    row=SimpleNamespace(paper_average_price=D('0'),paper_filled_quantity=1,side='buy',metadata_json='{}')
+    with pytest.raises(ForwardResearchError,match='immutable quote'):
+        _evaluation_price(row,'paper')

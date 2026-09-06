@@ -456,10 +456,12 @@ Implemented repair:
 - Unresolved incident count uses all rows rather than the 20-row display cap.
 - M6L reports use the same journal/config/NAV/integrity health checks as other Solana studies. UI identifies cohorts and evaluations with newer trades.
 
-Validation: all 260 tests passed, including nine new regression tests; Python compilation, shell syntax, and fresh Alembic migration passed. Local Docker Compose rendering was unavailable; final GitHub validation and live deployment verification remain required before marking this repair deployed. No database schema migration or manual production SQL is introduced.
+Validation: all 260 tests passed, including nine new regression tests; Python compilation, shell syntax, and fresh Alembic migration passed. GitHub CI run 34009191597 also passed, including Compose rendering. The initial repair introduced no schema change; the precision follow-up below adds a widening-only migration.
 
 Research decision: prioritize correctness and versioned forward evidence over adding more strategies. Jupiter documentation confirms quote-only pricing without a taker is supported, but a quote is still not an executed transaction: https://dev.jup.ag/docs/guides/how-to-build-a-swap-with-ultra . No profitability claim follows from quote simulations. Polymarket synchronized-book acquisition remains a separate research task; its stale-book rejection counts are not a reason to force simulated trades.
 
 Outstanding beyond this repair: verified external dashboard/OTP journey, email-provider configuration (missing in inspected Edge Lab environment), backup restore drill, and sustained forward results from v2. Do not describe the whole product as finished or profitable.
 
-Deployment status: prepared and locally verified; post-deployment evidence must be appended below.
+Deployment: PR #58 merged as `8709b84fc965bc1df33fb5a42ca90eb9122cd13a`; Aurent restart-full run `34024624340` succeeded. Post-deploy status `34024737296` verified healthy services, zero restarts, safe Telegram menu and signing disabled. Snapshot `34024743220` at 09:28 UTC showed both v2 cohorts collecting independently. Historical v1 exploratory had nine closed trades, no open positions and realized P&L -57.7828647045 USD; its history is retained.
+
+Live verification exposed a legacy execution-price precision fault: NUMERIC(28,10) rounded tiny USD-per-atomic-token prices to zero and blocked evaluation/finalization. The follow-up widens only the two execution price columns to NUMERIC(50,30). Old zero-valued records remain unchanged; evaluation reconstructs a price only from that row's immutable decision-time quote when its positive price demonstrably rounds below the old precision. Unexplained zero prices still fail closed. No current market prices or fabricated fills are substituted. Migration downgrade refuses destructive precision reduction. Follow-up deployment verification is pending.
