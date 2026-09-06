@@ -128,6 +128,33 @@ def _same_optional_decimal(left: Decimal | None, right: Decimal | None) -> bool:
     return Decimal(left) == Decimal(right)
 
 
+def _evaluation_price(row: ForwardExecutionRecord, field: str) -> Decimal | None:
+    value = getattr(row, field + "_average_price")
+    if value is None or Decimal(value) != ZERO:
+        return Decimal(value) if value is not None else None
+    # Old NUMERIC(28,10) rows can round USD/atomic-token prices to zero.
+    # Recover only from their immutable decision-time quote, never market hindsight.
+    try:
+        meta = json.loads(row.metadata_json)
+        quote = meta[field + "_quote"]
+        phase = "entry" if row.side == "buy" else "exit"
+        amount_key = "out_amount" if row.side == "buy" else "in_amount"
+        usd_key = "in_usd_value" if row.side == "buy" else "out_usd_value"
+        if meta["phase"] != phase or quote.get("transaction_present"):
+            raise ValueError("invalid quote provenance")
+        if Decimal(getattr(row, field + "_filled_quantity")) <= ZERO:
+            raise ValueError("no recorded fill")
+        usd, amount = Decimal(str(quote[usd_key])), Decimal(str(quote[amount_key]))
+        if not usd.is_finite() or not amount.is_finite() or usd <= ZERO or amount <= ZERO:
+            raise ValueError("invalid quote values")
+        recovered = usd / amount
+        if recovered >= Decimal("0.00000000005"):
+            raise ValueError("zero is not explained by legacy rounding")
+        return recovered
+    except (KeyError, TypeError, ValueError, ArithmeticError) as exc:
+        raise ForwardResearchError("zero execution price lacks recoverable immutable quote evidence") from exc
+
+
 class ForwardResearchService:
     @staticmethod
     def create_study(
@@ -584,8 +611,8 @@ class ForwardResearchService:
                     Decimal(row.intended_quantity),
                     Decimal(row.paper_filled_quantity),
                     Decimal(row.shadow_filled_quantity),
-                    Decimal(row.paper_average_price) if row.paper_average_price is not None else None,
-                    Decimal(row.shadow_average_price) if row.shadow_average_price is not None else None,
+                    _evaluation_price(row, "paper"),
+                    _evaluation_price(row, "shadow"),
                     Decimal(row.paper_cost_usd),
                     Decimal(row.shadow_cost_usd),
                 )

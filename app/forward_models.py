@@ -70,8 +70,8 @@ class ForwardExecutionRecord(Base):
     intended_quantity: Mapped[Decimal] = mapped_column(Numeric(28, 10))
     paper_filled_quantity: Mapped[Decimal] = mapped_column(Numeric(28, 10))
     shadow_filled_quantity: Mapped[Decimal] = mapped_column(Numeric(28, 10))
-    paper_average_price: Mapped[Decimal | None] = mapped_column(Numeric(28, 10))
-    shadow_average_price: Mapped[Decimal | None] = mapped_column(Numeric(28, 10))
+    paper_average_price: Mapped[Decimal | None] = mapped_column(Numeric(50, 30))
+    shadow_average_price: Mapped[Decimal | None] = mapped_column(Numeric(50, 30))
     paper_cost_usd: Mapped[Decimal] = mapped_column(Numeric(28, 10), default=0)
     shadow_cost_usd: Mapped[Decimal] = mapped_column(Numeric(28, 10), default=0)
     metadata_json: Mapped[str] = mapped_column(Text, default="{}")
@@ -128,3 +128,4 @@ class ForwardScanObservation(Base):
     rejection_reasons_json: Mapped[str] = mapped_column(Text, default="{}")
     metadata_json: Mapped[str] = mapped_column(Text, default="{}")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
