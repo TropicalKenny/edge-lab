@@ -3,11 +3,11 @@ from __future__ import annotations
 import json
 import uuid
 from dataclasses import asdict, dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import Settings
@@ -22,7 +22,6 @@ from app.solana_forward import (
     STRATEGY_NAME,
     STRATEGY_SLUG,
     STRATEGY_VERSION,
-    OpenPosition,
     SolanaForwardConfig,
     SolanaForwardConfigError,
     SolanaForwardTick,
@@ -402,15 +401,10 @@ class OperationalSolanaLaunchBaselineForwardRunner(SolanaLaunchBaselineForwardRu
                 input_amount=position.token_amount_atomic,
                 max_price_impact=config.max_quote_price_impact_pct,
             ) or quote is None:
-                bucket = int(_aware(now).timestamp() // 300)
-                ForwardResearchService.record_incident(
-                    db,
-                    study_id=study.id,
-                    external_key=f"solana-nav-mark:{position.launch_signature}:{bucket}",
-                    severity="error",
+                self._record_incident(
+                    db, study, now, severity="error",
                     code="SOLANA_EXECUTABLE_NAV_MARK_UNAVAILABLE",
                     message=f"no valid executable exit mark for {position.mint}",
-                    opened_at=_aware(now),
                     data_integrity=False,
                 )
                 return None
@@ -471,6 +465,7 @@ class OperationalSolanaLaunchBaselineForwardRunner(SolanaLaunchBaselineForwardRu
         study: ForwardStudy,
         *,
         now: datetime | None = None,
+        allow_entries: bool = True,
     ) -> SolanaForwardTick:
         now = _aware(now or datetime.now(timezone.utc))
         config = SolanaForwardConfig.from_study(study)
@@ -484,7 +479,7 @@ class OperationalSolanaLaunchBaselineForwardRunner(SolanaLaunchBaselineForwardRu
         closed, failed_exits = await self._exit_due_positions(db, study, config, now=now)
         nav_ok, nav_action = await self._mark_nav_if_due(db, study, config, now=now)
         opened = attempts = 0
-        if nav_ok:
+        if nav_ok and allow_entries:
             opened, attempts = await self._attempt_new_entries(db, study, config, now=now)
         detail = (
             f"reconciled={reconciled} closed={closed} failed_exits={failed_exits} "
@@ -493,3 +488,4 @@ class OperationalSolanaLaunchBaselineForwardRunner(SolanaLaunchBaselineForwardRu
         )
         self.health.set("solana_forward", nav_ok, detail)
         return SolanaForwardTick(study.id, "cycle" if nav_ok else "waiting", detail)
+

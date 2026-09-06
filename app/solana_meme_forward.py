@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+import time
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
@@ -11,9 +12,9 @@ from sqlalchemy.orm import Session
 
 from app.forward_models import ForwardExecutionRecord, ForwardScanObservation, ForwardStudy
 from app.scan_telemetry import record_scan_observation
+from app.forward_research import ForwardResearchService
 from app.solana_forward import (
     ZERO,
-    OpenPosition,
     SolanaForwardConfig,
     SolanaForwardTick,
     _aware,
@@ -30,9 +31,9 @@ M6L_RUNNER = "solana_meme_momentum_m6l_v1"
 M6L_INSTRUMENT = "PUMP_MOMENTUM_M6L"
 M6L_STRATEGY_SLUG = "solana-pump-momentum-paper"
 M6L_STRATEGY_NAME = "Solana Pump Momentum Paper"
-M6L_STRATEGY_VERSION = "m6l-v1"
-M6L_STRICT_EXTERNAL_ID = "solana-meme-momentum-strict-m6l-v1"
-M6L_EXPLORATORY_EXTERNAL_ID = "solana-meme-momentum-exploratory-m6l-v1"
+M6L_STRATEGY_VERSION = "m6l-v2"
+M6L_STRICT_EXTERNAL_ID = "solana-meme-momentum-strict-m6l-v2"
+M6L_EXPLORATORY_EXTERNAL_ID = "solana-meme-momentum-exploratory-m6l-v2"
 
 
 class M6LMemeConfigError(RuntimeError):
@@ -219,6 +220,8 @@ def alpha_score(
     )
     if acceleration is not None and acceleration >= config.min_volume_acceleration:
         score += 1
+    elif acceleration is not None:
+        reasons.append("VOLUME_ACCELERATION_BELOW_ENTRY")
 
     sell_ratio = Decimal(feature.sell_ratio_5m) if feature.sell_ratio_5m is not None else None
     if sell_ratio is not None and sell_ratio <= config.max_sell_ratio_5m:
@@ -243,7 +246,7 @@ def alpha_score(
             score += 1
 
     hard_reject = any(
-        reason in {"SELL_PRESSURE_TOO_HIGH", "EARLY_PRICE_COLLAPSE", "EXTREME_SHORT_WINDOW_SPIKE"}
+        reason in {"MOMENTUM_BELOW_ENTRY", "VOLUME_ACCELERATION_BELOW_ENTRY", "SELL_PRESSURE_TOO_HIGH", "EARLY_PRICE_COLLAPSE", "EXTREME_SHORT_WINDOW_SPIKE"}
         for reason in reasons
     )
     if score < config.min_alpha_score:
@@ -281,6 +284,11 @@ class OperationalSolanaMemeMomentumForwardRunner(OperationalSolanaLaunchBaseline
                 continue
             peak = max(peak, value)
         return peak
+
+    async def _executable_equity(self, db, study, config, *, now):
+        if json.loads(study.study_config_json).get("implementation_revision") == "m6l-v2":
+            config = replace(config, max_quote_price_impact_pct=Decimal("1"))
+        return await super()._executable_equity(db, study, config, now=now)
 
     async def _latest_feature(
         self,
@@ -329,6 +337,9 @@ class OperationalSolanaMemeMomentumForwardRunner(OperationalSolanaLaunchBaseline
         *,
         now: datetime,
     ) -> tuple[int, int]:
+        # Historical v1 studies drain existing positions but cannot open new ones.
+        if json.loads(study.study_config_json).get("implementation_revision") != "m6l-v2":
+            return 0, 0
         m6l = M6LMemeConfig.from_study(study)
         attempted = self._attempted_signatures(db, study.id)
         open_positions = self._open_positions(db, study.id)
@@ -373,7 +384,10 @@ class OperationalSolanaMemeMomentumForwardRunner(OperationalSolanaLaunchBaseline
         ).all()
 
         opened = quote_attempts = features_ready = alpha_passed = security_passed = 0
+        scan_started = time.monotonic()
         for launch in launches:
+            if time.monotonic() - scan_started > 10:
+                break
             if launch.signature in attempted:
                 continue
             if opened >= min(capacity, config.max_entries_per_cycle):
@@ -398,6 +412,7 @@ class OperationalSolanaMemeMomentumForwardRunner(OperationalSolanaLaunchBaseline
             metadata = {
                 "research_lane": "m6l-sol-paper",
                 "strategy_version": M6L_STRATEGY_VERSION,
+                "implementation_revision": "m6l-v2",
                 "cohort": m6l.cohort,
                 "mint": launch.mint,
                 "launch_signature": launch.signature,
@@ -506,6 +521,9 @@ class OperationalSolanaMemeMomentumForwardRunner(OperationalSolanaLaunchBaseline
         now: datetime,
     ) -> tuple[int, int]:
         m6l = M6LMemeConfig.from_study(study)
+        if json.loads(study.study_config_json).get("implementation_revision") == "m6l-v2":
+            # A real full-size adverse exit is a loss to record, not an absent route.
+            config = replace(config, max_quote_price_impact_pct=Decimal("1"))
         closed_count = failed_attempts = 0
         for position in self._open_positions(db, study.id):
             now = _aware(now)
@@ -572,7 +590,7 @@ class OperationalSolanaMemeMomentumForwardRunner(OperationalSolanaLaunchBaseline
                 continue
 
             recovery = Decimal(shadow.out_usd_value) / position.entry_in_usd
-            bucket = int(_aware(shadow.captured_at).timestamp() // 60)
+            bucket = _aware(shadow.captured_at).isoformat()
             mark_key = f"{self._mark_prefix(position.launch_signature)}{bucket}"
             record_scan_observation(
                 db,
@@ -640,6 +658,7 @@ class OperationalSolanaMemeMomentumForwardRunner(OperationalSolanaLaunchBaseline
             )
         ).all()
         results: list[SolanaForwardTick] = []
+        entry_studies = []
         for study in studies:
             blocked = self._block_reason(study.id, db)
             if blocked is not None:
@@ -647,7 +666,16 @@ class OperationalSolanaMemeMomentumForwardRunner(OperationalSolanaLaunchBaseline
                 continue
             try:
                 M6LMemeConfig.from_study(study)
-                results.append(await self.run_study_once(db, study, now=now))
+                tick = await self.run_study_once(db, study, now=now, allow_entries=False)
+                results.append(tick)
+                if tick.action == "cycle":
+                    if json.loads(study.study_config_json).get("implementation_revision") == "m6l-v2":
+                        entry_studies.append(study)
+                    elif not self._open_positions(db, study.id):
+                        # Preserve and close historical evidence; no reset or relabelling.
+                        finished_at = datetime.now(timezone.utc)
+                        ForwardResearchService.evaluate_study(db, study_id=study.id, evaluated_at=finished_at)
+                        ForwardResearchService.complete_study(db, study_id=study.id, completed_at=finished_at)
             except Exception as exc:
                 db.rollback()
                 self._record_incident(
@@ -660,4 +688,13 @@ class OperationalSolanaMemeMomentumForwardRunner(OperationalSolanaLaunchBaseline
                     data_integrity=False,
                 )
                 results.append(SolanaForwardTick(study.id, "error", f"{type(exc).__name__}: {exc}"))
+        for study in entry_studies:
+            try:
+                await self._attempt_new_entries(db, study, SolanaForwardConfig.from_study(study), now=now)
+            except Exception as exc:
+                db.rollback()
+                self._record_incident(db, study, now, severity="error", code="M6L_SOLANA_ENTRY_ERROR",
+                                      message=f"{type(exc).__name__}: {exc}", data_integrity=False)
+                results.append(SolanaForwardTick(study.id, "error", "entry scan failed"))
         return results
+

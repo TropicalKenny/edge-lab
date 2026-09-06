@@ -25,7 +25,7 @@ from app.solana_meme_forward import (
     M6L_STRICT_EXTERNAL_ID,
 )
 
-M6L_CODE_ID = "m6l-solana-meme-momentum-v1"
+M6L_CODE_ID = "m6l-solana-meme-momentum-v2"
 INITIAL_CAPITAL = Decimal("1000")
 
 
@@ -43,8 +43,10 @@ def _strategy_config() -> dict[str, Any]:
         "venue": "solana",
         "instrument": M6L_INSTRUMENT,
         "strategy_runner": M6L_RUNNER,
+        "implementation_revision": "m6l-v2",
+        "exit_max_quote_price_impact_pct": "1",
         "paper_only": True,
-        "alpha_version": "m6l-sol-alpha-v1",
+        "alpha_version": "m6l-sol-alpha-v2",
         "execution_engine": RUNNER_NAME,
         "decision_window_minutes": [3, 20],
         "min_alpha_score": 3,
@@ -67,6 +69,8 @@ def study_config(cohort: str) -> dict[str, Any]:
     return {
         "runner": RUNNER_NAME,
         "strategy_runner": M6L_RUNNER,
+        "implementation_revision": "m6l-v2",
+        "exit_max_quote_price_impact_pct": "1",
         "cohort": cohort,
         "entry_notional_usd": "25",
         "decision_delay_minutes": 3,
@@ -279,3 +283,4 @@ class M6LMemeBootstrap:
                 )
             )
         return studies
+

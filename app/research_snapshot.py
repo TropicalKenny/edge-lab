@@ -17,7 +17,7 @@ from app.solana_forward_ops import study_statuses as solana_study_statuses
 from app.scan_telemetry import scan_activity_summary
 
 SNAPSHOT_SCHEMA = "edge-lab-research-snapshot-v1"
-CHALLENGER_RESEARCH_LANES = ("m6j", "m6k-hl", "m6k-pm", "m6k-sol")
+CHALLENGER_RESEARCH_LANES = ("m6j", "m6k-hl", "m6k-pm", "m6k-sol", "m6l-sol-paper-mark")
 M6K_LANE_BY_VENUE = {
     "hyperliquid": "m6k-hl",
     "polymarket": "m6k-pm",
@@ -49,7 +49,7 @@ def _operational_reports(
     reports.extend(
         ForwardOperationsService.study_statuses(db, settings=settings, now=now)
     )
-    reports.extend(solana_study_statuses(db, settings=settings, now=now))
+    reports.extend(solana_study_statuses(db, settings=settings, now=now, include_meme=True))
     reports.extend(polymarket_study_statuses(db, settings=settings, now=now))
     return {str(report["study_id"]): report for report in reports}
 
@@ -94,6 +94,7 @@ def _compact_evaluation(evaluation: dict[str, Any] | None) -> dict[str, Any] | N
         "net_pnl_usd",
         "stressed_net_pnl_usd",
         "max_drawdown_pct",
+        "has_newer_trades",
         "profit_factor",
         "reasons",
     )
@@ -167,6 +168,13 @@ def build_research_snapshot(
                 "net_pnl_usd": row.get("net_pnl_usd"),
                 "return_pct": row.get("return_pct"),
                 "observed_max_drawdown_pct": row.get("observed_max_drawdown_pct"),
+                "drawdown_scope": row.get("drawdown_scope"),
+                "drawdown_unit": "fraction",
+                "cohort": row.get("cohort"),
+                "total_pnl_usd": row.get("total_pnl_usd"),
+                "realized_pnl_usd": row.get("realized_pnl_usd"),
+                "unrealized_pnl_usd": row.get("unrealized_pnl_usd"),
+                "nav_as_of": row.get("nav_as_of"),
                 "closed_trades": row.get("closed_trades"),
                 "execution_observations": row.get("execution_observations"),
                 "unresolved_incidents": row.get("unresolved_incidents"),

@@ -184,3 +184,7 @@ M6L adds no:
 4. implement Hyperliquid challenger registration/capital-efficiency reporting;
 5. implement synchronized Polymarket event-book paper execution;
 6. perform strategy reviews on fixed intervals and create new versioned challengers rather than silently retuning an existing experiment.
+
+## V2 repair boundary — 6 September 2026
+
+V1 implementation failed to enforce mandatory momentum/available acceleration checks and applied the entry-impact rejection gate to exits. V2 is a separate version and pair of studies with these faults repaired. V1 trades remain in the journal; v1 runs exit-only until positions are closed, then completes. Do not pool v1 and v2 performance. V2 preserves the same dollar size, stop/trail thresholds and entry impact limit, accepts full-size adverse exits with impact up to 100%, and checks all cohort exits before new entry scans. Missing quotes still do not become fills. See PROJECT_SOURCE.md for validation and deployment evidence.

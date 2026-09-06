@@ -613,6 +613,7 @@ class ForwardResearchService:
         result = EvidenceEvaluator(policy).evaluate(evaluation)
         run_id = str(uuid.uuid4())
         metrics = {
+            "study_id": study.id,
             "performance": asdict(result.performance),
             "execution": asdict(result.execution),
             "prediction": asdict(result.prediction),
@@ -664,3 +665,4 @@ class ForwardResearchService:
         db.commit()
         db.refresh(study)
         return study
+

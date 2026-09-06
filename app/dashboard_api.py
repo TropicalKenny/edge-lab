@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.evaluation_models import StrategyEvaluationRun
+from app.evaluation_lookup import latest_study_evaluation
 from app.forward_models import (
     ForwardExecutionRecord,
     ForwardNavObservation,
@@ -63,12 +64,7 @@ def _max_drawdown_pct(nav_rows: list[ForwardNavObservation]) -> Decimal | None:
 
 
 def _latest_evaluation(db: Session, study: ForwardStudy) -> StrategyEvaluationRun | None:
-    return db.scalar(
-        select(StrategyEvaluationRun)
-        .where(StrategyEvaluationRun.strategy_version_id == study.strategy_version_id)
-        .order_by(StrategyEvaluationRun.evaluated_at.desc())
-        .limit(1)
-    )
+    return latest_study_evaluation(db, study)
 
 
 def _strategy_identity(db: Session, study: ForwardStudy) -> tuple[str, str, str]:
@@ -87,7 +83,6 @@ def _study_payload(db: Session, study: ForwardStudy, now: datetime) -> dict[str,
             select(ForwardNavObservation)
             .where(ForwardNavObservation.study_id == study.id)
             .order_by(ForwardNavObservation.observed_at.desc())
-            .limit(60)
         ).all()
     )
     nav_rows.reverse()
@@ -138,6 +133,13 @@ def _study_payload(db: Session, study: ForwardStudy, now: datetime) -> dict[str,
         "initial_capital_usd": initial,
         "latest_nav_usd": current,
         "net_pnl_usd": Decimal(net_pnl),
+        "realized_pnl_usd": Decimal(net_pnl),
+        "total_pnl_usd": current - initial,
+        "unrealized_pnl_usd": current - initial - Decimal(net_pnl),
+        "nav_as_of": latest_nav.observed_at if latest_nav else None,
+        "drawdown_scope": "lifetime",
+        "drawdown_unit": "fraction",
+        "cohort": (_json(study.study_config_json) or {}).get("cohort"),
         "return_pct": ((current - initial) / initial * Decimal("100")) if initial > ZERO else ZERO,
         "observed_max_drawdown_pct": observed_drawdown,
         "closed_trades": int(trade_count),
@@ -149,6 +151,7 @@ def _study_payload(db: Session, study: ForwardStudy, now: datetime) -> dict[str,
             {
                 "recommendation": evaluation.recommendation,
                 "evaluated_at": evaluation.evaluated_at,
+                "has_newer_trades": bool(db.scalar(select(ForwardTradeRecord.id).where(ForwardTradeRecord.study_id == study.id, ForwardTradeRecord.closed_at > evaluation.evaluated_at).limit(1))),
                 "forward_days": evaluation.forward_days,
                 "trade_count": evaluation.trade_count,
                 "net_pnl_usd": Decimal(evaluation.net_pnl_usd),
@@ -165,7 +168,7 @@ def _study_payload(db: Session, study: ForwardStudy, now: datetime) -> dict[str,
             else None
         ),
         "nav_history": [
-            {"observed_at": row.observed_at, "nav_usd": Decimal(row.nav_usd)} for row in nav_rows
+            {"observed_at": row.observed_at, "nav_usd": Decimal(row.nav_usd)} for row in nav_rows[-60:]
         ],
     }
 
@@ -244,7 +247,7 @@ def dashboard_summary(db: Session = Depends(get_db)):
             "worst_observed_study_drawdown_pct": max(drawdowns) if drawdowns else None,
             "closed_trades": sum(int(row["closed_trades"]) for row in study_rows),
             "execution_observations": sum(int(row["execution_observations"]) for row in study_rows),
-            "unresolved_incidents": len(unresolved),
+            "unresolved_incidents": int(db.scalar(select(func.count(ForwardStudyIncident.id)).where(ForwardStudyIncident.resolved.is_(False))) or 0),
             "permanent_data_integrity_incidents": permanent_integrity_count,
             "contaminated_study_count": sum(1 for row in study_rows if row["contaminated"]),
             "data_integrity_incidents": permanent_integrity_count,
@@ -280,3 +283,4 @@ def dashboard_summary(db: Session = Depends(get_db)):
             for item in recent_trades
         ],
     }
+
