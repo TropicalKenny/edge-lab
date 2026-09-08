@@ -1,0 +1,1199 @@
+{
+  "captured_at": "2026-09-08T23:51:04.380835+00:00",
+  "incidents": [
+    {
+      "code": "SOLANA_EXECUTABLE_NAV_MARK_UNAVAILABLE",
+      "data_integrity": false,
+      "id": "a3eb5bcd-9fd6-430b-8166-387c63362d24",
+      "message": "no valid executable exit mark for 8p9KikS566bcHXFEMWfuxbW1wSLhkTMz7CYTHqfFpump",
+      "opened_at": "2026-09-08T01:53:06.894485+00:00",
+      "severity": "error",
+      "strategy_name": "Solana Pump Momentum Paper",
+      "study_id": "61db4b4b-94f7-4ca3-9faa-8bd674fa9843"
+    },
+    {
+      "code": "SOLANA_EXECUTABLE_NAV_MARK_UNAVAILABLE",
+      "data_integrity": false,
+      "id": "e5edcf40-5632-4973-b569-0da7e22594bf",
+      "message": "no valid executable exit mark for 4uHCUSi2PSMYpruxUXr4BzTeukTaEXtRjSDxS45Ppump",
+      "opened_at": "2026-09-07T16:00:09.359411+00:00",
+      "severity": "error",
+      "strategy_name": "Solana Pump Momentum Paper",
+      "study_id": "61db4b4b-94f7-4ca3-9faa-8bd674fa9843"
+    },
+    {
+      "code": "SOLANA_EXECUTABLE_NAV_MARK_UNAVAILABLE",
+      "data_integrity": false,
+      "id": "8cc6471a-d39b-48c6-8cbf-f5b1c3a60890",
+      "message": "no valid executable exit mark for 4uHCUSi2PSMYpruxUXr4BzTeukTaEXtRjSDxS45Ppump",
+      "opened_at": "2026-09-07T15:38:45.777186+00:00",
+      "severity": "error",
+      "strategy_name": "Solana Pump Momentum Paper",
+      "study_id": "61db4b4b-94f7-4ca3-9faa-8bd674fa9843"
+    },
+    {
+      "code": "M6L_SOLANA_FORWARD_ERROR",
+      "data_integrity": false,
+      "id": "5560da3a-f769-48e4-92a0-de4bf4f59ecc",
+      "message": "EvaluationError: paper average price must be positive",
+      "opened_at": "2026-09-06T09:26:55.193591+00:00",
+      "severity": "error",
+      "strategy_name": "Solana Pump Momentum Paper",
+      "study_id": "eba18af5-b3cf-4c9a-b08a-52c3c2d4afda"
+    },
+    {
+      "code": "SOLANA_EXECUTABLE_NAV_MARK_UNAVAILABLE",
+      "data_integrity": false,
+      "id": "bac0e5e3-186d-4d4b-af5d-75f832c6fc62",
+      "message": "no valid executable exit mark for 2eCH6vKHo5CxuC8vujq5fHgJ9Sqxv12L3dTHYufKpump",
+      "opened_at": "2026-09-06T02:15:45.110148+00:00",
+      "severity": "error",
+      "strategy_name": "Solana Pump Momentum Paper",
+      "study_id": "eba18af5-b3cf-4c9a-b08a-52c3c2d4afda"
+    },
+    {
+      "code": "M6L_SOLANA_FORWARD_ERROR",
+      "data_integrity": false,
+      "id": "8d5f22c1-12df-4f3e-9959-1eec155d9fe3",
+      "message": "ForwardResearchError: conflicting retry for existing incident key",
+      "opened_at": "2026-09-06T01:58:31.405310+00:00",
+      "severity": "error",
+      "strategy_name": "Solana Pump Momentum Paper",
+      "study_id": "eba18af5-b3cf-4c9a-b08a-52c3c2d4afda"
+    },
+    {
+      "code": "SOLANA_EXECUTABLE_NAV_MARK_UNAVAILABLE",
+      "data_integrity": false,
+      "id": "aae53a78-f683-4f80-8065-43a1da298994",
+      "message": "no valid executable exit mark for GLCqxGEqL3E3JVF9JmjY2WcSFZos1bZBwsYacmNDQg72",
+      "opened_at": "2026-09-06T01:57:29.565785+00:00",
+      "severity": "error",
+      "strategy_name": "Solana Pump Momentum Paper",
+      "study_id": "eba18af5-b3cf-4c9a-b08a-52c3c2d4afda"
+    },
+    {
+      "code": "HL_CARRY_UNEXPECTED_ERROR",
+      "data_integrity": false,
+      "id": "739d96a8-440b-48f7-9b42-f72744cfabf2",
+      "message": "HyperliquidInfoError: Hyperliquid info request failed: Server error '502 Bad Gateway' for url 'https://api.hyperliquid.xyz/info'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/502",
+      "opened_at": "2026-09-05T09:29:13.834494+00:00",
+      "severity": "error",
+      "strategy_name": "Hyperliquid Funding Carry",
+      "study_id": "3645f442-8db2-4a9b-84d0-9ac2fd0bb97e"
+    },
+    {
+      "code": "HL_CARRY_UNEXPECTED_ERROR",
+      "data_integrity": false,
+      "id": "e5c244c3-c217-482b-a4ca-1c66860bc5cf",
+      "message": "HyperliquidInfoError: unknown spot context identity: @71",
+      "opened_at": "2026-09-03T10:04:57.976797+00:00",
+      "severity": "error",
+      "strategy_name": "Hyperliquid Funding Carry",
+      "study_id": "3645f442-8db2-4a9b-84d0-9ac2fd0bb97e"
+    },
+    {
+      "code": "PM_FORWARD_UNEXPECTED",
+      "data_integrity": false,
+      "id": "5ce466ce-a1ed-4792-bb30-f10283485cfe",
+      "message": "PolymarketPublicError: Gamma markets request failed: Client error '422 Unprocessable Entity' for url 'https://gamma-api.polymarket.com/markets/keyset?limit=50&closed=false&order=liquidity_num&ascending=false'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/422",
+      "opened_at": "2026-09-03T10:00:57.795674+00:00",
+      "severity": "error",
+      "strategy_name": "Polymarket Immediate Structural",
+      "study_id": "cb0820b7-4767-45c0-ae1b-d4a3a2dc3b88"
+    }
+  ],
+  "mode": "paper-shadow-research-only",
+  "portfolio": {
+    "active_study_count": 5,
+    "closed_trades": 39,
+    "contaminated_study_count": 0,
+    "execution_observations": 252,
+    "net_pnl_usd": "-122.3215016874",
+    "permanent_data_integrity_incidents": 0,
+    "return_pct": "-1.747450024105714285714285714",
+    "simulated_initial_capital_usd": "7000.0000000000",
+    "simulated_latest_nav_usd": "6877.6784983126",
+    "study_count": 7,
+    "unresolved_incidents": 14,
+    "worst_observed_study_drawdown_pct": "0.0645391072519"
+  },
+  "recent_trades": [
+    {
+      "allocated_capital_usd": "25.0000865952",
+      "closed_at": "2026-09-08T22:29:30.119695+00:00",
+      "fees_usd": "0E-10",
+      "id": "291cd550-d676-4345-bbfa-899afa383ed9",
+      "net_pnl_usd": "-5.9502304756",
+      "opened_at": "2026-09-08T21:59:12.413489+00:00",
+      "planned_loss_usd": "25.0000865952",
+      "slippage_usd": "1.1257322229",
+      "strategy_name": "Solana Pump Momentum Paper",
+      "study_id": "61db4b4b-94f7-4ca3-9faa-8bd674fa9843"
+    },
+    {
+      "allocated_capital_usd": "24.9959031678",
+      "closed_at": "2026-09-08T10:54:53.053985+00:00",
+      "fees_usd": "0E-10",
+      "id": "76151cc9-4073-45fa-b4ef-5b80f40e832a",
+      "net_pnl_usd": "-1.3798289832",
+      "opened_at": "2026-09-08T10:24:37.990567+00:00",
+      "planned_loss_usd": "24.9959031678",
+      "slippage_usd": "1.3798289832",
+      "strategy_name": "Solana Pump Momentum Paper",
+      "study_id": "61db4b4b-94f7-4ca3-9faa-8bd674fa9843"
+    },
+    {
+      "allocated_capital_usd": "24.9964436735",
+      "closed_at": "2026-09-08T10:13:26.377021+00:00",
+      "fees_usd": "0E-10",
+      "id": "7e57d740-f63b-4d06-a514-2fd8bbc509ed",
+      "net_pnl_usd": "-1.0449868401",
+      "opened_at": "2026-09-08T09:43:18.231393+00:00",
+      "planned_loss_usd": "24.9964436735",
+      "slippage_usd": "1.0449868401",
+      "strategy_name": "Solana Pump Momentum Paper",
+      "study_id": "61db4b4b-94f7-4ca3-9faa-8bd674fa9843"
+    },
+    {
+      "allocated_capital_usd": "24.9962101002",
+      "closed_at": "2026-09-08T09:55:29.962963+00:00",
+      "fees_usd": "0E-10",
+      "id": "933fca34-2566-41bd-933c-4e054827f990",
+      "net_pnl_usd": "-1.6937923808",
+      "opened_at": "2026-09-08T09:25:14.916813+00:00",
+      "planned_loss_usd": "24.9962101002",
+      "slippage_usd": "1.6016145433",
+      "strategy_name": "Solana Pump Momentum Paper",
+      "study_id": "61db4b4b-94f7-4ca3-9faa-8bd674fa9843"
+    },
+    {
+      "allocated_capital_usd": "24.9968479863",
+      "closed_at": "2026-09-08T08:34:46.885708+00:00",
+      "fees_usd": "0E-10",
+      "id": "c1857bb1-4a1a-4e14-8423-e188a4fc3a95",
+      "net_pnl_usd": "-0.7354995801",
+      "opened_at": "2026-09-08T08:04:35.362461+00:00",
+      "planned_loss_usd": "24.9968479863",
+      "slippage_usd": "0.9546258413",
+      "strategy_name": "Solana Pump Momentum Paper",
+      "study_id": "61db4b4b-94f7-4ca3-9faa-8bd674fa9843"
+    },
+    {
+      "allocated_capital_usd": "24.9960339504",
+      "closed_at": "2026-09-08T05:02:10.377221+00:00",
+      "fees_usd": "0E-10",
+      "id": "f11d53ca-00c7-49e4-b95b-f0a83f2ed737",
+      "net_pnl_usd": "-1.0724327148",
+      "opened_at": "2026-09-08T04:32:06.228684+00:00",
+      "planned_loss_usd": "24.9960339504",
+      "slippage_usd": "1.0265797960",
+      "strategy_name": "Solana Pump Momentum Paper",
+      "study_id": "61db4b4b-94f7-4ca3-9faa-8bd674fa9843"
+    },
+    {
+      "allocated_capital_usd": "24.9978991752",
+      "closed_at": "2026-09-08T02:48:16.265622+00:00",
+      "fees_usd": "0E-10",
+      "id": "101a09d8-c14e-4847-83e3-750790fe131e",
+      "net_pnl_usd": "-1.4707633487",
+      "opened_at": "2026-09-08T02:18:14.631542+00:00",
+      "planned_loss_usd": "24.9978991752",
+      "slippage_usd": "1.2479553099",
+      "strategy_name": "Solana Pump Momentum Paper",
+      "study_id": "61db4b4b-94f7-4ca3-9faa-8bd674fa9843"
+    },
+    {
+      "allocated_capital_usd": "24.9982019916",
+      "closed_at": "2026-09-08T02:29:14.275543+00:00",
+      "fees_usd": "0E-10",
+      "id": "c203478b-ac9e-4c69-9f65-42cfbe7aca1e",
+      "net_pnl_usd": "-1.4168276413",
+      "opened_at": "2026-09-08T01:59:05.994351+00:00",
+      "planned_loss_usd": "24.9982019916",
+      "slippage_usd": "1.4450371048",
+      "strategy_name": "Solana Pump Momentum Paper",
+      "study_id": "61db4b4b-94f7-4ca3-9faa-8bd674fa9843"
+    },
+    {
+      "allocated_capital_usd": "24.9977428417",
+      "closed_at": "2026-09-08T02:16:13.097085+00:00",
+      "fees_usd": "0E-10",
+      "id": "44d69221-a853-4229-b617-c074a3bc6440",
+      "net_pnl_usd": "-1.4806061845",
+      "opened_at": "2026-09-08T01:46:07.154202+00:00",
+      "planned_loss_usd": "24.9977428417",
+      "slippage_usd": "1.5030038457",
+      "strategy_name": "Solana Pump Momentum Paper",
+      "study_id": "61db4b4b-94f7-4ca3-9faa-8bd674fa9843"
+    },
+    {
+      "allocated_capital_usd": "24.9972747988",
+      "closed_at": "2026-09-08T01:08:55.501670+00:00",
+      "fees_usd": "0E-10",
+      "id": "27831fd3-e39b-42bd-9607-b092e1fd173f",
+      "net_pnl_usd": "-0.9952691481",
+      "opened_at": "2026-09-08T00:38:41.605611+00:00",
+      "planned_loss_usd": "24.9972747988",
+      "slippage_usd": "1.0130246673",
+      "strategy_name": "Solana Pump Momentum Paper",
+      "study_id": "61db4b4b-94f7-4ca3-9faa-8bd674fa9843"
+    }
+  ],
+  "safety": {
+    "can_move_funds": false,
+    "can_sign": false,
+    "can_trade_live": false,
+    "live_capital_usd": "0",
+    "shell_access": false,
+    "signer_enabled": false,
+    "wallet_access": false
+  },
+  "schema": "edge-lab-research-snapshot-v1",
+  "studies": [
+    {
+      "activity": {
+        "accepted": 0,
+        "cycles": 287,
+        "deferred": 0,
+        "examined": 287,
+        "last_scan_at": "2026-09-08T23:47:46.944352+00:00",
+        "metadata_totals": {},
+        "rejected": 287,
+        "research_lane": null,
+        "top_rejection_reasons": [
+          {
+            "count": 287,
+            "reason": "EDGE_BELOW_THRESHOLD"
+          },
+          {
+            "count": 106,
+            "reason": "NON_POSITIVE_FUNDING"
+          }
+        ],
+        "tracking": true,
+        "tracking_since": "2026-09-03T12:59:40.813804+00:00",
+        "window_hours": 24
+      },
+      "closed_trades": 0,
+      "cohort": null,
+      "contaminated": false,
+      "data_integrity_incidents": 0,
+      "drawdown_scope": "lifetime",
+      "drawdown_unit": "fraction",
+      "elapsed_days": 5,
+      "execution_observations": 0,
+      "external_id": "hyperliquid-btc-carry-m6c-v1",
+      "family": "funding",
+      "initial_capital_usd": "1000.0000000000",
+      "instrument": "BTC",
+      "latest_evaluation": {
+        "evaluated_at": "2026-09-08T00:37:20.256785+00:00",
+        "forward_days": 4,
+        "has_newer_trades": false,
+        "max_drawdown_pct": "0E-10",
+        "net_pnl_usd": "0E-10",
+        "profit_factor": null,
+        "reasons": [
+          "NO_CLOSED_TRADES",
+          "INSUFFICIENT_FORWARD_DAYS",
+          "INSUFFICIENT_TRADE_SAMPLE",
+          "NO_SHADOW_EXECUTION_SAMPLE"
+        ],
+        "recommendation": "AMBER",
+        "stressed_net_pnl_usd": "0E-10",
+        "trade_count": 0
+      },
+      "latest_nav_usd": "1000.0000000000",
+      "nav_as_of": "2026-09-08T23:02:38.805453+00:00",
+      "net_pnl_usd": "0",
+      "observed_max_drawdown_pct": "0",
+      "operational": {
+        "data_integrity_failure_count": 0,
+        "execution_observation_count": 0,
+        "funding_age_seconds": 3064.328835,
+        "hard_reasons": [],
+        "incident_count": 4,
+        "last_nav_at": "2026-09-08T23:02:38.805453+00:00",
+        "latest_funding_at": "2026-09-08T23:00:00.052000+00:00",
+        "latest_market_at": "2026-09-08T23:50:27.919867+00:00",
+        "market_age_seconds": 36.460968,
+        "open_position_count": 0,
+        "state": "ready",
+        "trade_count": 0,
+        "unresolved_critical_incident_count": 0,
+        "warnings": []
+      },
+      "realized_pnl_usd": "0",
+      "research_acceleration": {
+        "accepted": 80,
+        "cycles": 95,
+        "deferred": 0,
+        "examined": 380,
+        "last_scan_at": "2026-09-08T23:43:28.184997+00:00",
+        "metadata_totals": {
+          "m6j_assets_tested": 285,
+          "m6j_candidates_examined": 380,
+          "m6j_horizons_tested": 380,
+          "m6j_nonpositive_edge_candidates": 300,
+          "m6j_positive_edge_candidates": 80
+        },
+        "rejected": 300,
+        "research_lane": "m6j",
+        "top_rejection_reasons": [
+          {
+            "count": 300,
+            "reason": "NO_POSITIVE_EDGE_AFTER_COSTS"
+          }
+        ],
+        "tracking": true,
+        "tracking_since": "2026-09-03T14:56:13.043270+00:00",
+        "window_hours": 24
+      },
+      "return_pct": "0",
+      "started_at": "2026-09-03T08:32:08.904855+00:00",
+      "strategy_name": "Hyperliquid Funding Carry",
+      "strategy_research": {
+        "accepted": 95,
+        "cycles": 95,
+        "deferred": 0,
+        "examined": 380,
+        "last_scan_at": "2026-09-08T23:43:28.184997+00:00",
+        "metadata_totals": {
+          "m6k_hl_candidates_examined": 380,
+          "m6k_hl_screen_passed": 95,
+          "m6k_hl_screen_rejected": 285
+        },
+        "rejected": 285,
+        "research_lane": "m6k-hl",
+        "top_rejection_reasons": [
+          {
+            "count": 285,
+            "reason": "BASELINE_EDGE_FRACTION_BELOW_SCREEN"
+          },
+          {
+            "count": 285,
+            "reason": "COST_STRESS_FRACTION_BELOW_SCREEN"
+          },
+          {
+            "count": 285,
+            "reason": "CURRENT_BASELINE_STREAK_BELOW_SCREEN"
+          },
+          {
+            "count": 285,
+            "reason": "POSITIVE_EDGE_FRACTION_BELOW_SCREEN"
+          }
+        ],
+        "tracking": true,
+        "tracking_since": "2026-09-05T15:26:42.517202+00:00",
+        "window_hours": 24
+      },
+      "strategy_status": "red",
+      "strategy_version": "m6c-v1",
+      "study_id": "3645f442-8db2-4a9b-84d0-9ac2fd0bb97e",
+      "study_status": "active",
+      "total_pnl_usd": "0E-10",
+      "unrealized_pnl_usd": "0E-10",
+      "unresolved_incidents": 4,
+      "venue": "hyperliquid"
+    },
+    {
+      "activity": {
+        "accepted": 0,
+        "cycles": 1394,
+        "deferred": 0,
+        "examined": 0,
+        "last_scan_at": "2026-09-08T23:50:26.848813+00:00",
+        "metadata_totals": {
+          "attempts": 0,
+          "markets_discovered": 69700,
+          "markets_validated": 69699,
+          "structural_candidates": 0,
+          "trades": 0
+        },
+        "rejected": 0,
+        "research_lane": null,
+        "top_rejection_reasons": [],
+        "tracking": true,
+        "tracking_since": "2026-09-03T12:59:39.406499+00:00",
+        "window_hours": 24
+      },
+      "closed_trades": 0,
+      "cohort": null,
+      "contaminated": false,
+      "data_integrity_incidents": 0,
+      "drawdown_scope": "lifetime",
+      "drawdown_unit": "fraction",
+      "elapsed_days": 5,
+      "execution_observations": 0,
+      "external_id": "polymarket-structural-m6f-v1",
+      "family": "other",
+      "initial_capital_usd": "1000.0000000000",
+      "instrument": "STRUCTURAL_IMMEDIATE",
+      "latest_evaluation": {
+        "evaluated_at": "2026-09-08T00:37:20.256785+00:00",
+        "forward_days": 4,
+        "has_newer_trades": false,
+        "max_drawdown_pct": "0E-10",
+        "net_pnl_usd": "0E-10",
+        "profit_factor": null,
+        "reasons": [
+          "NO_CLOSED_TRADES",
+          "INSUFFICIENT_FORWARD_DAYS",
+          "INSUFFICIENT_TRADE_SAMPLE",
+          "NO_SHADOW_EXECUTION_SAMPLE"
+        ],
+        "recommendation": "AMBER",
+        "stressed_net_pnl_usd": "0E-10",
+        "trade_count": 0
+      },
+      "latest_nav_usd": "1000.0000000000",
+      "nav_as_of": "2026-09-08T23:00:54.079897+00:00",
+      "net_pnl_usd": "0",
+      "observed_max_drawdown_pct": "0",
+      "operational": {
+        "data_integrity_failure_count": 0,
+        "execution_observation_count": 0,
+        "hard_reasons": [],
+        "incident_count": 3,
+        "last_nav_at": "2026-09-08T23:00:54.079897+00:00",
+        "nav_age_seconds": 3010.300938,
+        "state": "ready",
+        "trade_count": 0,
+        "unresolved_critical_incident_count": 0,
+        "warnings": []
+      },
+      "realized_pnl_usd": "0",
+      "research_acceleration": {
+        "accepted": 112,
+        "cycles": 1409,
+        "deferred": 0,
+        "examined": 162660,
+        "last_scan_at": "2026-09-08T23:49:43.459010+00:00",
+        "metadata_totals": {
+          "m6j_assets_subscribed": 552644,
+          "m6j_baseline_10bps_edge_events": 112,
+          "m6j_binary_checks": 142557,
+          "m6j_book_events": 142557,
+          "m6j_markets_subscribed": 276342,
+          "m6j_negrisk_checks": 20103,
+          "m6j_pair_checks": 162660,
+          "m6j_positive_edge_events": 112,
+          "m6j_ws_messages": 2996992
+        },
+        "rejected": 162548,
+        "research_lane": "m6j",
+        "top_rejection_reasons": [
+          {
+            "count": 78955,
+            "reason": "NO_EXECUTABLE_EDGE"
+          },
+          {
+            "count": 52141,
+            "reason": "NO_ASK_LIQUIDITY"
+          },
+          {
+            "count": 51443,
+            "reason": "STALE_BOOK"
+          },
+          {
+            "count": 1801,
+            "reason": "INCOMPLETE_NEG_RISK_EVENT"
+          },
+          {
+            "count": 1214,
+            "reason": "CLOB_MARKET_METADATA_MISMATCH"
+          }
+        ],
+        "tracking": true,
+        "tracking_since": "2026-09-03T14:56:19.332874+00:00",
+        "window_hours": 24
+      },
+      "return_pct": "0",
+      "started_at": "2026-09-03T08:32:09.531993+00:00",
+      "strategy_name": "Polymarket Immediate Structural",
+      "strategy_research": {
+        "accepted": 112,
+        "cycles": 1409,
+        "deferred": 0,
+        "examined": 20103,
+        "last_scan_at": "2026-09-08T23:49:43.459010+00:00",
+        "metadata_totals": {
+          "m6k_pm_baseline_qualified": 112,
+          "m6k_pm_event_checks": 20103,
+          "m6k_pm_positive_violations": 112,
+          "m6k_pm_valid_observations": 1332
+        },
+        "rejected": 19991,
+        "research_lane": "m6k-pm",
+        "top_rejection_reasons": [
+          {
+            "count": 18570,
+            "reason": "STALE_BOOK"
+          },
+          {
+            "count": 1710,
+            "reason": "NO_POSITIVE_EVENT_CONSISTENCY_GAP"
+          },
+          {
+            "count": 201,
+            "reason": "NO_ASK_LIQUIDITY"
+          }
+        ],
+        "tracking": true,
+        "tracking_since": "2026-09-05T15:40:15.223990+00:00",
+        "window_hours": 24
+      },
+      "strategy_status": "red",
+      "strategy_version": "m6f-v1",
+      "study_id": "cb0820b7-4767-45c0-ae1b-d4a3a2dc3b88",
+      "study_status": "active",
+      "total_pnl_usd": "0E-10",
+      "unrealized_pnl_usd": "0E-10",
+      "unresolved_incidents": 3,
+      "venue": "polymarket"
+    },
+    {
+      "activity": {
+        "accepted": 0,
+        "cycles": 1437,
+        "deferred": 0,
+        "examined": 35,
+        "last_scan_at": "2026-09-08T23:50:44.357754+00:00",
+        "metadata_totals": {
+          "features_ready": 901,
+          "launches_in_window": 1074,
+          "opened": 0,
+          "quote_attempts": 0
+        },
+        "rejected": 35,
+        "research_lane": null,
+        "top_rejection_reasons": [
+          {
+            "count": 35,
+            "reason": "CREATOR_SECURITY_NOT_CLEAN"
+          },
+          {
+            "count": 35,
+            "reason": "SECURITY_CREATOR_NOT_CLEAN"
+          },
+          {
+            "count": 35,
+            "reason": "TRANSFER_FEE_NOT_ZERO_OR_UNKNOWN"
+          },
+          {
+            "count": 12,
+            "reason": "PREFLIGHT_EXIT_IMPACT_MISSING"
+          },
+          {
+            "count": 12,
+            "reason": "PREFLIGHT_EXIT_VALUE_MISSING"
+          }
+        ],
+        "tracking": true,
+        "tracking_since": "2026-09-03T12:35:22.619259+00:00",
+        "window_hours": 24
+      },
+      "closed_trades": 0,
+      "cohort": null,
+      "contaminated": false,
+      "data_integrity_incidents": 0,
+      "drawdown_scope": "lifetime",
+      "drawdown_unit": "fraction",
+      "elapsed_days": 5,
+      "execution_observations": 0,
+      "external_id": "solana-pump-baseline-m6g-v1",
+      "family": "meme",
+      "initial_capital_usd": "1000.0000000000",
+      "instrument": "PUMP_LAUNCH_BASELINE",
+      "latest_evaluation": {
+        "evaluated_at": "2026-09-08T00:37:20.256785+00:00",
+        "forward_days": 4,
+        "has_newer_trades": false,
+        "max_drawdown_pct": "0E-10",
+        "net_pnl_usd": "0E-10",
+        "profit_factor": null,
+        "reasons": [
+          "NO_CLOSED_TRADES",
+          "INSUFFICIENT_FORWARD_DAYS",
+          "INSUFFICIENT_TRADE_SAMPLE",
+          "NO_SHADOW_EXECUTION_SAMPLE"
+        ],
+        "recommendation": "AMBER",
+        "stressed_net_pnl_usd": "0E-10",
+        "trade_count": 0
+      },
+      "latest_nav_usd": "1000.0000000000",
+      "nav_as_of": "2026-09-08T23:46:43.677429+00:00",
+      "net_pnl_usd": "0",
+      "observed_max_drawdown_pct": "0",
+      "operational": {
+        "data_integrity_failure_count": 0,
+        "execution_observation_count": 0,
+        "hard_reasons": [],
+        "incident_count": 0,
+        "last_nav_at": "2026-09-08T23:46:43.677429+00:00",
+        "nav_age_seconds": 260.703406,
+        "open_position_count": 0,
+        "state": "ready",
+        "trade_count": 0,
+        "unresolved_critical_incident_count": 0,
+        "warnings": []
+      },
+      "realized_pnl_usd": "0",
+      "research_acceleration": {
+        "accepted": 30,
+        "cycles": 1340,
+        "deferred": 0,
+        "examined": 35,
+        "last_scan_at": "2026-09-08T23:50:42.735797+00:00",
+        "metadata_totals": {
+          "m6j_candidates_examined": 35,
+          "m6j_counterfactual_entry_quotes": 30,
+          "m6j_counterfactual_outcomes": 122,
+          "m6j_counterfactual_quote_attempts": 35,
+          "m6j_counterfactual_roundtrip_quotes": 19,
+          "m6j_safe_candidates": 0,
+          "m6j_unknown_candidates": 35,
+          "m6j_unsafe_candidates": 0
+        },
+        "rejected": 5,
+        "research_lane": "m6j",
+        "top_rejection_reasons": [
+          {
+            "count": 44,
+            "reason": "COUNTERFACTUAL_EXIT_QUOTE_UNAVAILABLE"
+          },
+          {
+            "count": 5,
+            "reason": "COUNTERFACTUAL_ENTRY_QUOTE_UNAVAILABLE"
+          }
+        ],
+        "tracking": true,
+        "tracking_since": "2026-09-03T14:56:12.323132+00:00",
+        "window_hours": 24
+      },
+      "return_pct": "0",
+      "started_at": "2026-09-03T08:32:13.207309+00:00",
+      "strategy_name": "Solana Pump Safety Baseline",
+      "strategy_research": {
+        "accepted": 0,
+        "cycles": 1340,
+        "deferred": 0,
+        "examined": 0,
+        "last_scan_at": "2026-09-08T23:50:42.735797+00:00",
+        "metadata_totals": {
+          "m6k_sol_resolutions_safe": 0,
+          "m6k_sol_resolutions_unsafe": 0,
+          "m6k_sol_unknown_entries": 35,
+          "m6k_sol_unknown_outcomes": 122
+        },
+        "rejected": 0,
+        "research_lane": "m6k-sol",
+        "top_rejection_reasons": [
+          {
+            "count": 44,
+            "reason": "COUNTERFACTUAL_EXIT_QUOTE_UNAVAILABLE"
+          },
+          {
+            "count": 35,
+            "reason": "CREATOR_SECURITY_UNKNOWN"
+          },
+          {
+            "count": 35,
+            "reason": "SECURITY_CREATOR_UNKNOWN"
+          },
+          {
+            "count": 35,
+            "reason": "TRANSFER_FEE_UNKNOWN"
+          }
+        ],
+        "tracking": true,
+        "tracking_since": "2026-09-05T15:26:41.818066+00:00",
+        "window_hours": 24
+      },
+      "strategy_status": "red",
+      "strategy_version": "m6g-v1",
+      "study_id": "22c15930-fb23-4772-8fe7-a13b1921a184",
+      "study_status": "active",
+      "total_pnl_usd": "0E-10",
+      "unrealized_pnl_usd": "0E-10",
+      "unresolved_incidents": 0,
+      "venue": "solana"
+    },
+    {
+      "activity": {
+        "accepted": 0,
+        "cycles": 0,
+        "deferred": 0,
+        "examined": 0,
+        "last_scan_at": null,
+        "metadata_totals": {},
+        "rejected": 0,
+        "research_lane": null,
+        "top_rejection_reasons": [],
+        "tracking": true,
+        "tracking_since": "2026-09-05T16:37:29.990821+00:00",
+        "window_hours": 24
+      },
+      "closed_trades": 9,
+      "cohort": "exploratory",
+      "contaminated": false,
+      "data_integrity_incidents": 0,
+      "drawdown_scope": "lifetime",
+      "drawdown_unit": "fraction",
+      "elapsed_days": 3,
+      "execution_observations": 28,
+      "external_id": "solana-meme-momentum-exploratory-m6l-v1",
+      "family": "meme",
+      "initial_capital_usd": "1000.0000000000",
+      "instrument": "PUMP_MOMENTUM_M6L",
+      "latest_evaluation": {
+        "evaluated_at": "2026-09-06T09:37:19.780769+00:00",
+        "forward_days": 0,
+        "has_newer_trades": false,
+        "max_drawdown_pct": "0.0607529150",
+        "net_pnl_usd": "-57.7828647045",
+        "profit_factor": "0.0235776407",
+        "reasons": [
+          "NON_POSITIVE_NET_PNL",
+          "FAILS_COST_STRESS",
+          "INSUFFICIENT_FORWARD_DAYS",
+          "PROFIT_FACTOR_BELOW_GATE",
+          "PROFIT_TOO_CONCENTRATED",
+          "INSUFFICIENT_TRADE_SAMPLE",
+          "INSUFFICIENT_SHADOW_SAMPLE",
+          "SHADOW_FILL_RATIO_BELOW_GATE"
+        ],
+        "recommendation": "RED",
+        "stressed_net_pnl_usd": "-65.2345048028",
+        "trade_count": 9
+      },
+      "latest_nav_usd": "942.2171352955",
+      "nav_as_of": "2026-09-06T09:32:29.385285+00:00",
+      "net_pnl_usd": "-57.7828647045",
+      "observed_max_drawdown_pct": "0.06075291495430850782671623285",
+      "operational": {
+        "data_integrity_failure_count": 0,
+        "execution_observation_count": 28,
+        "hard_reasons": [
+          "STUDY_NOT_ACTIVE"
+        ],
+        "incident_count": 4,
+        "last_nav_at": "2026-09-06T09:32:29.385285+00:00",
+        "nav_age_seconds": 224314.99555,
+        "open_position_count": 0,
+        "state": "blocked",
+        "trade_count": 9,
+        "unresolved_critical_incident_count": 0,
+        "warnings": [
+          "FORWARD_RUNNER_NAV_STALE"
+        ]
+      },
+      "realized_pnl_usd": "-57.7828647045",
+      "research_acceleration": {
+        "accepted": 0,
+        "cycles": 0,
+        "deferred": 0,
+        "examined": 0,
+        "last_scan_at": null,
+        "metadata_totals": {},
+        "rejected": 0,
+        "research_lane": "m6j",
+        "top_rejection_reasons": [],
+        "tracking": false,
+        "tracking_since": null,
+        "window_hours": 24
+      },
+      "return_pct": "-5.7782864704500",
+      "started_at": "2026-09-05T16:37:25.869744+00:00",
+      "strategy_name": "Solana Pump Momentum Paper",
+      "strategy_research": {
+        "accepted": 0,
+        "cycles": 0,
+        "deferred": 0,
+        "examined": 0,
+        "last_scan_at": null,
+        "metadata_totals": {},
+        "rejected": 0,
+        "research_lane": "m6k-sol",
+        "top_rejection_reasons": [],
+        "tracking": false,
+        "tracking_since": null,
+        "window_hours": 24
+      },
+      "strategy_status": "red",
+      "strategy_version": "m6l-v1",
+      "study_id": "eba18af5-b3cf-4c9a-b08a-52c3c2d4afda",
+      "study_status": "completed",
+      "total_pnl_usd": "-57.7828647045",
+      "unrealized_pnl_usd": "0E-10",
+      "unresolved_incidents": 4,
+      "venue": "solana"
+    },
+    {
+      "activity": {
+        "accepted": 0,
+        "cycles": 0,
+        "deferred": 0,
+        "examined": 0,
+        "last_scan_at": null,
+        "metadata_totals": {},
+        "rejected": 0,
+        "research_lane": null,
+        "top_rejection_reasons": [],
+        "tracking": true,
+        "tracking_since": "2026-09-05T16:37:29.990821+00:00",
+        "window_hours": 24
+      },
+      "closed_trades": 0,
+      "cohort": "strict",
+      "contaminated": false,
+      "data_integrity_incidents": 0,
+      "drawdown_scope": "lifetime",
+      "drawdown_unit": "fraction",
+      "elapsed_days": 3,
+      "execution_observations": 0,
+      "external_id": "solana-meme-momentum-strict-m6l-v1",
+      "family": "meme",
+      "initial_capital_usd": "1000.0000000000",
+      "instrument": "PUMP_MOMENTUM_M6L",
+      "latest_evaluation": {
+        "evaluated_at": "2026-09-06T09:26:55.317474+00:00",
+        "forward_days": 0,
+        "has_newer_trades": false,
+        "max_drawdown_pct": "0E-10",
+        "net_pnl_usd": "0E-10",
+        "profit_factor": null,
+        "reasons": [
+          "NO_CLOSED_TRADES",
+          "INSUFFICIENT_FORWARD_DAYS",
+          "INSUFFICIENT_TRADE_SAMPLE",
+          "NO_SHADOW_EXECUTION_SAMPLE"
+        ],
+        "recommendation": "AMBER",
+        "stressed_net_pnl_usd": "0E-10",
+        "trade_count": 0
+      },
+      "latest_nav_usd": "1000.0000000000",
+      "nav_as_of": "2026-09-06T09:25:19.861389+00:00",
+      "net_pnl_usd": "0",
+      "observed_max_drawdown_pct": "0",
+      "operational": {
+        "data_integrity_failure_count": 0,
+        "execution_observation_count": 0,
+        "hard_reasons": [
+          "STUDY_NOT_ACTIVE"
+        ],
+        "incident_count": 0,
+        "last_nav_at": "2026-09-06T09:25:19.861389+00:00",
+        "nav_age_seconds": 224744.519446,
+        "open_position_count": 0,
+        "state": "blocked",
+        "trade_count": 0,
+        "unresolved_critical_incident_count": 0,
+        "warnings": [
+          "FORWARD_RUNNER_NAV_STALE"
+        ]
+      },
+      "realized_pnl_usd": "0",
+      "research_acceleration": {
+        "accepted": 0,
+        "cycles": 0,
+        "deferred": 0,
+        "examined": 0,
+        "last_scan_at": null,
+        "metadata_totals": {},
+        "rejected": 0,
+        "research_lane": "m6j",
+        "top_rejection_reasons": [],
+        "tracking": false,
+        "tracking_since": null,
+        "window_hours": 24
+      },
+      "return_pct": "0",
+      "started_at": "2026-09-05T16:37:25.869744+00:00",
+      "strategy_name": "Solana Pump Momentum Paper",
+      "strategy_research": {
+        "accepted": 0,
+        "cycles": 0,
+        "deferred": 0,
+        "examined": 0,
+        "last_scan_at": null,
+        "metadata_totals": {},
+        "rejected": 0,
+        "research_lane": "m6k-sol",
+        "top_rejection_reasons": [],
+        "tracking": false,
+        "tracking_since": null,
+        "window_hours": 24
+      },
+      "strategy_status": "red",
+      "strategy_version": "m6l-v1",
+      "study_id": "971f61bf-4d72-47ba-81dd-7367c6f7b168",
+      "study_status": "completed",
+      "total_pnl_usd": "0E-10",
+      "unrealized_pnl_usd": "0E-10",
+      "unresolved_incidents": 0,
+      "venue": "solana"
+    },
+    {
+      "activity": {
+        "accepted": 10,
+        "cycles": 1441,
+        "deferred": 0,
+        "examined": 207,
+        "last_scan_at": "2026-09-08T23:51:01.513668+00:00",
+        "metadata_totals": {
+          "features_ready": 376,
+          "launches_in_window": 713,
+          "opened": 7,
+          "quote_attempts": 9
+        },
+        "rejected": 197,
+        "research_lane": null,
+        "top_rejection_reasons": [
+          {
+            "count": 186,
+            "reason": "MOMENTUM_BELOW_ENTRY"
+          },
+          {
+            "count": 143,
+            "reason": "ALPHA_SCORE_BELOW_ENTRY"
+          },
+          {
+            "count": 115,
+            "reason": "VOLUME_ACCELERATION_BELOW_ENTRY"
+          },
+          {
+            "count": 27,
+            "reason": "SELL_PRESSURE_TOO_HIGH"
+          },
+          {
+            "count": 21,
+            "reason": "EARLY_PRICE_COLLAPSE"
+          }
+        ],
+        "tracking": true,
+        "tracking_since": "2026-09-06T09:26:55.193591+00:00",
+        "window_hours": 24
+      },
+      "closed_trades": 30,
+      "cohort": "exploratory",
+      "contaminated": false,
+      "data_integrity_incidents": 0,
+      "drawdown_scope": "lifetime",
+      "drawdown_unit": "fraction",
+      "elapsed_days": 2,
+      "execution_observations": 224,
+      "external_id": "solana-meme-momentum-exploratory-m6l-v2",
+      "family": "meme",
+      "initial_capital_usd": "1000.0000000000",
+      "instrument": "PUMP_MOMENTUM_M6L",
+      "latest_evaluation": {
+        "evaluated_at": "2026-09-08T00:37:20.256785+00:00",
+        "forward_days": 1,
+        "has_newer_trades": true,
+        "max_drawdown_pct": "0.0475739569",
+        "net_pnl_usd": "-47.2983996857",
+        "profit_factor": "0.1985208300",
+        "reasons": [
+          "NON_POSITIVE_NET_PNL",
+          "FAILS_COST_STRESS",
+          "INSUFFICIENT_FORWARD_DAYS",
+          "PROFIT_FACTOR_BELOW_GATE",
+          "PROFIT_TOO_CONCENTRATED",
+          "INSUFFICIENT_TRADE_SAMPLE",
+          "SHADOW_FILL_RATIO_BELOW_GATE"
+        ],
+        "recommendation": "RED",
+        "stressed_net_pnl_usd": "-72.2941264576",
+        "trade_count": 20
+      },
+      "latest_nav_usd": "935.4613630171",
+      "nav_as_of": "2026-09-08T23:47:43.615597+00:00",
+      "net_pnl_usd": "-64.5386369829",
+      "observed_max_drawdown_pct": "0.0645391072519",
+      "operational": {
+        "data_integrity_failure_count": 0,
+        "execution_observation_count": 224,
+        "hard_reasons": [],
+        "incident_count": 3,
+        "last_nav_at": "2026-09-08T23:47:43.615597+00:00",
+        "nav_age_seconds": 200.765238,
+        "open_position_count": 0,
+        "state": "ready",
+        "trade_count": 30,
+        "unresolved_critical_incident_count": 0,
+        "warnings": []
+      },
+      "realized_pnl_usd": "-64.5386369829",
+      "research_acceleration": {
+        "accepted": 0,
+        "cycles": 0,
+        "deferred": 0,
+        "examined": 0,
+        "last_scan_at": null,
+        "metadata_totals": {},
+        "rejected": 0,
+        "research_lane": "m6j",
+        "top_rejection_reasons": [],
+        "tracking": false,
+        "tracking_since": null,
+        "window_hours": 24
+      },
+      "return_pct": "-6.4538636982900",
+      "started_at": "2026-09-06T09:26:51.289629+00:00",
+      "strategy_name": "Solana Pump Momentum Paper",
+      "strategy_research": {
+        "accepted": 0,
+        "cycles": 0,
+        "deferred": 0,
+        "examined": 0,
+        "last_scan_at": null,
+        "metadata_totals": {},
+        "rejected": 0,
+        "research_lane": "m6k-sol",
+        "top_rejection_reasons": [],
+        "tracking": false,
+        "tracking_since": null,
+        "window_hours": 24
+      },
+      "strategy_status": "red",
+      "strategy_version": "m6l-v2",
+      "study_id": "61db4b4b-94f7-4ca3-9faa-8bd674fa9843",
+      "study_status": "active",
+      "total_pnl_usd": "-64.5386369829",
+      "unrealized_pnl_usd": "0E-10",
+      "unresolved_incidents": 3,
+      "venue": "solana"
+    },
+    {
+      "activity": {
+        "accepted": 0,
+        "cycles": 1441,
+        "deferred": 0,
+        "examined": 505,
+        "last_scan_at": "2026-09-08T23:51:01.513668+00:00",
+        "metadata_totals": {
+          "features_ready": 607,
+          "launches_in_window": 713,
+          "opened": 0,
+          "quote_attempts": 0
+        },
+        "rejected": 505,
+        "research_lane": null,
+        "top_rejection_reasons": [
+          {
+            "count": 505,
+            "reason": "STRICT_CREATOR_SECURITY_UNKNOWN"
+          },
+          {
+            "count": 505,
+            "reason": "STRICT_SECURITY_CREATOR_UNKNOWN"
+          },
+          {
+            "count": 505,
+            "reason": "STRICT_TRANSFER_FEE_UNKNOWN"
+          },
+          {
+            "count": 440,
+            "reason": "MOMENTUM_BELOW_ENTRY"
+          },
+          {
+            "count": 350,
+            "reason": "ALPHA_SCORE_BELOW_ENTRY"
+          }
+        ],
+        "tracking": true,
+        "tracking_since": "2026-09-06T09:26:55.193591+00:00",
+        "window_hours": 24
+      },
+      "closed_trades": 0,
+      "cohort": "strict",
+      "contaminated": false,
+      "data_integrity_incidents": 0,
+      "drawdown_scope": "lifetime",
+      "drawdown_unit": "fraction",
+      "elapsed_days": 2,
+      "execution_observations": 0,
+      "external_id": "solana-meme-momentum-strict-m6l-v2",
+      "family": "meme",
+      "initial_capital_usd": "1000.0000000000",
+      "instrument": "PUMP_MOMENTUM_M6L",
+      "latest_evaluation": {
+        "evaluated_at": "2026-09-08T00:37:20.256785+00:00",
+        "forward_days": 1,
+        "has_newer_trades": false,
+        "max_drawdown_pct": "0E-10",
+        "net_pnl_usd": "0E-10",
+        "profit_factor": null,
+        "reasons": [
+          "NO_CLOSED_TRADES",
+          "INSUFFICIENT_FORWARD_DAYS",
+          "INSUFFICIENT_TRADE_SAMPLE",
+          "NO_SHADOW_EXECUTION_SAMPLE"
+        ],
+        "recommendation": "AMBER",
+        "stressed_net_pnl_usd": "0E-10",
+        "trade_count": 0
+      },
+      "latest_nav_usd": "1000.0000000000",
+      "nav_as_of": "2026-09-08T23:46:58.040889+00:00",
+      "net_pnl_usd": "0",
+      "observed_max_drawdown_pct": "0",
+      "operational": {
+        "data_integrity_failure_count": 0,
+        "execution_observation_count": 0,
+        "hard_reasons": [],
+        "incident_count": 0,
+        "last_nav_at": "2026-09-08T23:46:58.040889+00:00",
+        "nav_age_seconds": 246.339946,
+        "open_position_count": 0,
+        "state": "ready",
+        "trade_count": 0,
+        "unresolved_critical_incident_count": 0,
+        "warnings": []
+      },
+      "realized_pnl_usd": "0",
+      "research_acceleration": {
+        "accepted": 0,
+        "cycles": 0,
+        "deferred": 0,
+        "examined": 0,
+        "last_scan_at": null,
+        "metadata_totals": {},
+        "rejected": 0,
+        "research_lane": "m6j",
+        "top_rejection_reasons": [],
+        "tracking": false,
+        "tracking_since": null,
+        "window_hours": 24
+      },
+      "return_pct": "0",
+      "started_at": "2026-09-06T09:26:51.289629+00:00",
+      "strategy_name": "Solana Pump Momentum Paper",
+      "strategy_research": {
+        "accepted": 0,
+        "cycles": 0,
+        "deferred": 0,
+        "examined": 0,
+        "last_scan_at": null,
+        "metadata_totals": {},
+        "rejected": 0,
+        "research_lane": "m6k-sol",
+        "top_rejection_reasons": [],
+        "tracking": false,
+        "tracking_since": null,
+        "window_hours": 24
+      },
+      "strategy_status": "red",
+      "strategy_version": "m6l-v2",
+      "study_id": "7962599d-a054-4e29-ba4e-3506cf60bfac",
+      "study_status": "active",
+      "total_pnl_usd": "0E-10",
+      "unrealized_pnl_usd": "0E-10",
+      "unresolved_incidents": 0,
+      "venue": "solana"
+    }
+  ]
+}
