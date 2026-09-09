@@ -41,3 +41,6 @@ include = ["app*"]
 
 [tool.setuptools.dynamic]
 version = {attr = "app.version.APP_VERSION"}
+
+[tool.setuptools.package-data]
+app = ["trend_protocol.json"]
