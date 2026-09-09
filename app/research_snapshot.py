@@ -8,6 +8,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from app.cost_audit import study_cost_audit
 from app.config import Settings, get_settings
 from app.dashboard_api import dashboard_summary
 from app.database import get_session_factory
@@ -185,6 +186,7 @@ def build_research_snapshot(
                 "activity": baseline_activity,
                 "research_acceleration": m6j_activity,
                 "strategy_research": m6k_activity,
+                "cost_audit": study_cost_audit(db, study_id, as_of=captured_at),
             }
         )
 
