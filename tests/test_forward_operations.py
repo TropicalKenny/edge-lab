@@ -113,7 +113,8 @@ def test_bootstrap_refuses_environment_drift_for_existing_external_id():
 
 def test_daily_evaluator_writes_once_and_never_promotes_strategy_status():
     db = db_session()
-    now = datetime.now(timezone.utc) - timedelta(minutes=1)
+    # Both evaluations must be in the past and on the same UTC calendar day.
+    now = datetime(2025, 1, 15, 12, tzinfo=timezone.utc)
     boot = ForwardOperationsService.bootstrap_hyperliquid_study(
         db, settings=settings(), now=now - timedelta(days=1)
     )
@@ -222,3 +223,4 @@ def test_operational_runner_makes_zero_market_calls_after_integrity_contaminatio
     assert "data-integrity" in results[0].detail
     assert client.calls == 0
     db.close()
+
