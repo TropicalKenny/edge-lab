@@ -169,8 +169,8 @@ def test_horizon_close_charges_costs_once(tmp_path):
 def test_missing_oracle_cannot_close_as_zero_funding_profit(tmp_path):
     db = setup(tmp_path)
     tick(db)
-    next_hour = 1001*HOUR+60000
-    save_funding(db, [{"coin": "BTC", "time": 1001*HOUR, "fundingRate": "-.0001"}])
+    next_hour = 1001 * HOUR + 60000
+    save_funding(db, [{"coin": "BTC", "time": 1001 * HOUR, "fundingRate": "-.0001"}])
     result = tick(db, next_hour)
     for b in result["books"]:
         assert b["contaminated"]
@@ -182,9 +182,28 @@ def test_missing_oracle_cannot_close_as_zero_funding_profit(tmp_path):
 def test_perp_price_spike_triggers_margin_exit(tmp_path):
     db = setup(tmp_path)
     tick(db)
-    now = NOW+60000
+    now = NOW + 60000
     perp = book("BTC", now)
     perp["levels"] = [[{"px": "159.99", "sz": "100"}], [{"px": "160.01", "sz": "100"}]]
     result = advance(db, now, market(now), book(now=now), perp)
     assert all(b["last_close"]["reason"] == "margin_guard" for b in result["books"])
     assert all(b["last_close"]["net_pnl_usd"] < -200 for b in result["books"])
+
+
+def test_actual_funding_timestamp_offsets_preserved(tmp_path):
+    db = database(tmp_path / "offset.db")
+    save_funding(
+        db,
+        [{"coin": "BTC", "time": i * HOUR + 17, "fundingRate": ".0001"} for i in range(281, 1001)],
+    )
+    assert forecast(db, NOW, 336) == pytest.approx(0.0336)
+    assert db.execute("SELECT max(time) FROM funding").fetchone()[0] == 1000 * HOUR + 17
+    assert len(rates_between(db, 999 * HOUR + 100, 1000 * HOUR + 100)) == 1
+    assert rates_between(db, 999 * HOUR + 100, 1000 * HOUR + 1) == []
+    assert len(rates_between(db, 1000 * HOUR + 1, 1000 * HOUR + 100)) == 1
+
+
+def test_second_record_in_same_funding_hour_rejected(tmp_path):
+    db = setup(tmp_path)
+    with pytest.raises(ValueError, match="conflicting"):
+        save_funding(db, [{"coin": "BTC", "time": 1000 * HOUR + 17, "fundingRate": ".0001"}])

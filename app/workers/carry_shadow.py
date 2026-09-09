@@ -72,6 +72,12 @@ async def cycle(db, client):
     )
     captured = datetime.now(UTC)
     result = advance(db, int(captured.timestamp() * 1000), market, spot_book, perp_book)
+    count, latest = db.execute("SELECT count(*),max(time) FROM funding").fetchone()
+    result["funding_coverage"] = {
+        "stored_points": count,
+        "latest_event_ms": latest,
+        "latest_offset_within_hour_ms": latest % HOUR if latest else None,
+    }
     result.update(checked_at=captured.isoformat(), status="running", identity=market["identity"])
     return result
 
