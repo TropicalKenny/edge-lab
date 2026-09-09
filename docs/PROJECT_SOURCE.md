@@ -2,7 +2,7 @@
 
 Living project handoff for continuing Edge Lab across chats and agents.
 
-Last updated: 5 September 2026, Africa/Lagos
+Last updated: 8 September 2026, Africa/Lagos
 
 ## How every future chat/agent should use this document
 
@@ -24,9 +24,9 @@ VPS host: OVH, Ubuntu user `ubuntu`
 
 Verified deployed runtime code revision:
 
-`957d456e8a70d7ec13984bd350cfd94961dc7820`
+`8b134d2d97fbb0190b60731af5632af5c8d88671`
 
-That revision is the M6K Stage 2 observation-research deployment from PR #55, `feat: add M6K stage 2 observation research`. PR #49's Telegram paper/shadow alerts remain in the runtime lineage.
+This is the verified PR #59 precision repair, following PR #58 research reliability repair. Earlier M6K research and Telegram paper/shadow alerts remain in the runtime lineage. See the 6 September verification at the end of this document.
 
 Current `main` may become newer after documentation-only commits. Do not redeploy merely because documentation advances `main`; compare changed files first.
 
@@ -556,4 +556,19 @@ Outstanding beyond this repair: verified external dashboard/OTP journey, email-p
 
 Deployment: PR #58 merged as `8709b84fc965bc1df33fb5a42ca90eb9122cd13a`; Aurent restart-full run `34024624340` succeeded. Post-deploy status `34024737296` verified healthy services, zero restarts, safe Telegram menu and signing disabled. Snapshot `34024743220` at 09:28 UTC showed both v2 cohorts collecting independently. Historical v1 exploratory had nine closed trades, no open positions and realized P&L -57.7828647045 USD; its history is retained.
 
-Live verification exposed a legacy execution-price precision fault: NUMERIC(28,10) rounded tiny USD-per-atomic-token prices to zero and blocked evaluation/finalization. The follow-up widens only the two execution price columns to NUMERIC(50,30). Old zero-valued records remain unchanged; evaluation reconstructs a price only from that row's immutable decision-time quote when its positive price demonstrably rounds below the old precision. Unexplained zero prices still fail closed. No current market prices or fabricated fills are substituted. Migration downgrade refuses destructive precision reduction. Follow-up deployment verification is pending.
+Live verification exposed a legacy execution-price precision fault: NUMERIC(28,10) rounded tiny USD-per-atomic-token prices to zero and blocked evaluation/finalization. The follow-up widens only the two execution price columns to NUMERIC(50,30). Old zero-valued records remain unchanged; evaluation reconstructs a price only from that row's immutable decision-time quote when its positive price demonstrably rounds below the old precision. Unexplained zero prices still fail closed. No current market prices or fabricated fills are substituted. Migration downgrade refuses destructive precision reduction. PR #59 merged as `8b134d2d97fbb0190b60731af5632af5c8d88671`; all 262 tests, compilation, shell checks, migration and CI Compose rendering passed (CI `34025055573`). Aurent full deployment `34025112177` and status `34025246504` passed, with four forward runners healthy, zero restarts, healthy private dashboard/control and signing disabled.
+
+Fresh snapshot `34051760242`, captured 2026-09-06 18:27:24 UTC, confirms both v1 studies completed and both v2 studies active/ready with separate evaluations. V1 exploratory final loss: -57.7828647045 USD across nine closed trades. V2 exploratory: six closed trades, -8.4609630932 USD, NAV 991.5390369068 USD, zero open positions and zero incidents. V2 strict: zero trades, NAV 1000 USD, zero incidents. Both had 542 scans since launch. Daily evaluations predate the later v2 trades; the dashboard correctly flags newer trades. Historical non-integrity incidents remain recorded; none is a new v2 incident. The old completed studies being reported STUDY_NOT_ACTIVE/NAV_STALE reflects retirement, not a failed active collector.
+
+The seven independent 1000 USD study books sum to 7000 USD nominal research capital. This is not one funded account and must not be sold as portfolio profitability. No live funds exist. The legacy internal API health registry still reports no-live-collector/not-wired while actual separate collectors are fresh; full external dashboard OTP and backup restore verification remain outstanding.
+
+Owner requested deep strategy research after the deployment. Research will compare carry, executable prediction-market arbitrage, momentum, cost attribution, combination rules and out-of-sample validation before proposing further strategy changes.
+
+
+## Strategy research continuation — 8 September 2026
+
+Deep strategy research is recorded in `docs/research/report-source.md`, with the verified raw paper snapshot in `docs/research/snapshot-20260908.json`. Aurent snapshot run `34292437379` captured 23:51:04 UTC: v2 exploratory 30 closed trades, realized P&L -64.5386369829 USD, NAV 935.4613630171 USD, no open positions; strict v2 zero trades. The latest ten v2 trades lost 17.2402372972 USD, including recorded quote-deterioration/slippage of 12.3423891545 USD on 249.9726442807 USD combined allocations. These numbers supersede the earlier six-trade snapshot. There are three v2 historical NAV quote-unavailable incidents, none a permanent data-integrity incident. All five active studies report ready and have fresh observations.
+
+Research decision: accounting/cost diagnostics first, then versioned longer-horizon carry and simple liquid-asset momentum challengers, followed by synchronized event-level Polymarket simulation. Keep current v2 evidence intact and do not increase meme exposure or silently retune the study. The report distinguishes historical strategy evidence, current venue mechanics and untested implementation hypotheses. No new challenger, portfolio weights, pause or live capability has been deployed in this research phase. Current code revision remains 8b134d2d97fbb0190b60731af5632af5c8d88671; documentation may be newer.
+
+Carry baseline inspection: default 24-hour holding horizon versus 31 bps round-trip fee/slippage budget can explain an empty opportunity set at modest funding; existing M6J 7/14/30-day research must be evaluated using realized funding and total capital. Polymarket's 112 positive event checks in the last day are not fills; synchronized books, current per-market fees and multi-leg failure modeling remain prerequisites. Security UNKNOWN remains a data gap, not evidence a token is safe. Public OTP/email and backup restore verification remain outstanding.
