@@ -1,0 +1,341 @@
+{
+  "captured_at": "2026-09-09T14:09:47.411977+00:00",
+  "can_trade_live": false,
+  "checked_at": "2026-09-09T14:08:43.196397+00:00",
+  "forward_trades": 0,
+  "latest_observation": {
+    "completed_candle_day": "2026-09-08",
+    "kind": "observation_only_no_simulated_fill",
+    "observed_at": "2026-09-09T14:08:43.196397+00:00",
+    "signals": {
+      "BTC-USD": {
+        "90": {
+          "signal": "long",
+          "signal_close": 78447.11,
+          "sma": 66888.14444444445
+        },
+        "180": {
+          "signal": "long",
+          "signal_close": 78447.11,
+          "sma": 70077.81544444444
+        }
+      },
+      "ETH-USD": {
+        "90": {
+          "signal": "long",
+          "signal_close": 2485.02,
+          "sma": 1952.8158888888888
+        },
+        "180": {
+          "signal": "long",
+          "signal_close": 2485.02,
+          "sma": 2050.2452222222223
+        }
+      }
+    }
+  },
+  "observation_days": 1,
+  "replay": {
+    "computed_at": "2026-09-09T14:08:43.196397+00:00",
+    "data_hash": "49276cb718759f845a00dafcd0036fde84e62618096de176b453f0d247a251bc",
+    "kind": "historical_bar_replay_not_forward_profit",
+    "live_capital_usd": 0,
+    "promoted": false,
+    "protocol_hash": "581acd427cd74153e1f5a71dd7471c8acd45944ac6c8407e6ff9cac022d38aa3",
+    "windows": {
+      "development": {
+        "buy_hold/base": {
+          "closed_round_trips": 2,
+          "fees_usd": 40.53855075693465,
+          "max_drawdown_fraction": 0.7786167629790025,
+          "net_pnl_usd": 4727.815004822299,
+          "pnl_less_largest_winning_trade_usd": 638.53484927519,
+          "return_fraction": 4.727815004822299,
+          "slippage_usd": 3.3794054963181557,
+          "winner_removal_method": "attribution subtraction; no path resimulation"
+        },
+        "buy_hold/double_cost": {
+          "closed_round_trips": 2,
+          "fees_usd": 80.52770285423159,
+          "max_drawdown_fraction": 0.7786167629790024,
+          "net_pnl_usd": 4653.82961668483,
+          "pnl_less_largest_winning_trade_usd": 623.8285533035605,
+          "return_fraction": 4.65382961668483,
+          "slippage_usd": 6.715382977221816,
+          "winner_removal_method": "attribution subtraction; no path resimulation"
+        },
+        "buy_hold/extra_day_delay": {
+          "closed_round_trips": 2,
+          "fees_usd": 40.53855075693465,
+          "max_drawdown_fraction": 0.7786167629790025,
+          "net_pnl_usd": 4727.815004822299,
+          "pnl_less_largest_winning_trade_usd": 638.53484927519,
+          "return_fraction": 4.727815004822299,
+          "slippage_usd": 3.3794054963181557,
+          "winner_removal_method": "attribution subtraction; no path resimulation"
+        },
+        "cash": {
+          "max_drawdown_fraction": 0,
+          "net_pnl_usd": 0,
+          "return_fraction": 0
+        },
+        "sma_180/base": {
+          "closed_round_trips": 25,
+          "fees_usd": 487.33511591571613,
+          "max_drawdown_fraction": 0.5896135580119816,
+          "net_pnl_usd": 3264.0503882633802,
+          "pnl_less_largest_winning_trade_usd": 62.643807919474966,
+          "return_fraction": 3.2640503882633802,
+          "slippage_usd": 40.612207659070975,
+          "winner_removal_method": "attribution subtraction; no path resimulation"
+        },
+        "sma_180/double_cost": {
+          "closed_round_trips": 25,
+          "fees_usd": 881.8586832114956,
+          "max_drawdown_fraction": 0.6213991926908478,
+          "net_pnl_usd": 2661.5366146889273,
+          "pnl_less_largest_winning_trade_usd": -295.3283004348086,
+          "return_fraction": 2.661536614688927,
+          "slippage_usd": 73.49184048809637,
+          "winner_removal_method": "attribution subtraction; no path resimulation"
+        },
+        "sma_180/extra_day_delay": {
+          "closed_round_trips": 25,
+          "fees_usd": 462.73186841516224,
+          "max_drawdown_fraction": 0.5799315423100814,
+          "net_pnl_usd": 3622.6312305366837,
+          "pnl_less_largest_winning_trade_usd": 578.0510706725249,
+          "return_fraction": 3.6226312305366837,
+          "slippage_usd": 38.56202001587659,
+          "winner_removal_method": "attribution subtraction; no path resimulation"
+        },
+        "sma_90/base": {
+          "closed_round_trips": 51,
+          "fees_usd": 873.8391657144011,
+          "max_drawdown_fraction": 0.7394468251911366,
+          "net_pnl_usd": 1112.3937241953254,
+          "pnl_less_largest_winning_trade_usd": -1142.562472900936,
+          "return_fraction": 1.1123937241953255,
+          "slippage_usd": 72.82044523953388,
+          "winner_removal_method": "attribution subtraction; no path resimulation"
+        },
+        "sma_90/double_cost": {
+          "closed_round_trips": 51,
+          "fees_usd": 1438.9179450868237,
+          "max_drawdown_fraction": 0.7851689038495713,
+          "net_pnl_usd": 519.352278780919,
+          "pnl_less_largest_winning_trade_usd": -1480.0417135759812,
+          "return_fraction": 0.519352278780919,
+          "slippage_usd": 119.9119069393661,
+          "winner_removal_method": "attribution subtraction; no path resimulation"
+        },
+        "sma_90/extra_day_delay": {
+          "closed_round_trips": 51,
+          "fees_usd": 1262.0204756605365,
+          "max_drawdown_fraction": 0.5929017728378057,
+          "net_pnl_usd": 3172.5449084679176,
+          "pnl_less_largest_winning_trade_usd": -347.17935436228345,
+          "return_fraction": 3.1725449084679176,
+          "slippage_usd": 105.16950790543439,
+          "winner_removal_method": "attribution subtraction; no path resimulation"
+        }
+      },
+      "holdout": {
+        "buy_hold/base": {
+          "closed_round_trips": 2,
+          "fees_usd": 10.678466287796821,
+          "max_drawdown_fraction": 0.6004027587714919,
+          "net_pnl_usd": -219.00565556486754,
+          "pnl_less_largest_winning_trade_usd": -219.00565556486754,
+          "return_fraction": -0.21900565556486754,
+          "slippage_usd": 0.8898203313074986,
+          "winner_removal_method": "attribution subtraction; no path resimulation"
+        },
+        "buy_hold/double_cost": {
+          "closed_round_trips": 2,
+          "fees_usd": 21.22094252204087,
+          "max_drawdown_fraction": 0.6004027587714917,
+          "net_pnl_usd": -229.09365066553903,
+          "pnl_less_largest_winning_trade_usd": -229.09365066553903,
+          "return_fraction": -0.22909365066553902,
+          "slippage_usd": 1.768205772334368,
+          "winner_removal_method": "attribution subtraction; no path resimulation"
+        },
+        "buy_hold/extra_day_delay": {
+          "closed_round_trips": 2,
+          "fees_usd": 10.678466287796821,
+          "max_drawdown_fraction": 0.6004027587714919,
+          "net_pnl_usd": -219.00565556486754,
+          "pnl_less_largest_winning_trade_usd": -219.00565556486754,
+          "return_fraction": -0.21900565556486754,
+          "slippage_usd": 0.8898203313074986,
+          "winner_removal_method": "attribution subtraction; no path resimulation"
+        },
+        "cash": {
+          "max_drawdown_fraction": 0,
+          "net_pnl_usd": 0,
+          "return_fraction": 0
+        },
+        "sma_180/base": {
+          "closed_round_trips": 19,
+          "fees_usd": 89.50332750476286,
+          "max_drawdown_fraction": 0.3630274416235777,
+          "net_pnl_usd": -226.90509721458704,
+          "pnl_less_largest_winning_trade_usd": -318.92045585064017,
+          "return_fraction": -0.22690509721458704,
+          "slippage_usd": 7.458578139599014,
+          "winner_removal_method": "attribution subtraction; no path resimulation"
+        },
+        "sma_180/double_cost": {
+          "closed_round_trips": 19,
+          "fees_usd": 168.8088160799508,
+          "max_drawdown_fraction": 0.39089408086167166,
+          "net_pnl_usd": -316.66391761960324,
+          "pnl_less_largest_winning_trade_usd": -397.05648759849703,
+          "return_fraction": -0.3166639176196032,
+          "slippage_usd": 14.067267552161912,
+          "winner_removal_method": "attribution subtraction; no path resimulation"
+        },
+        "sma_180/extra_day_delay": {
+          "closed_round_trips": 19,
+          "fees_usd": 97.97320315483813,
+          "max_drawdown_fraction": 0.29778244482413696,
+          "net_pnl_usd": -174.63282336215298,
+          "pnl_less_largest_winning_trade_usd": -265.6271652819554,
+          "return_fraction": -0.17463282336215297,
+          "slippage_usd": 8.164416472435576,
+          "winner_removal_method": "attribution subtraction; no path resimulation"
+        },
+        "sma_90/base": {
+          "closed_round_trips": 23,
+          "fees_usd": 156.89291545370207,
+          "max_drawdown_fraction": 0.3620888668342169,
+          "net_pnl_usd": 228.7251576987735,
+          "pnl_less_largest_winning_trade_usd": -99.74092102049201,
+          "return_fraction": 0.2287251576987735,
+          "slippage_usd": 13.074509294287449,
+          "winner_removal_method": "attribution subtraction; no path resimulation"
+        },
+        "sma_90/double_cost": {
+          "closed_round_trips": 23,
+          "fees_usd": 289.77927068922907,
+          "max_drawdown_fraction": 0.4208592962129949,
+          "net_pnl_usd": 52.27015619175745,
+          "pnl_less_largest_winning_trade_usd": -249.75123992799382,
+          "return_fraction": 0.05227015619175745,
+          "slippage_usd": 24.14863875550139,
+          "winner_removal_method": "attribution subtraction; no path resimulation"
+        },
+        "sma_90/extra_day_delay": {
+          "closed_round_trips": 23,
+          "fees_usd": 147.7397841285669,
+          "max_drawdown_fraction": 0.3882155484221833,
+          "net_pnl_usd": 51.99909227969397,
+          "pnl_less_largest_winning_trade_usd": -191.78997889167874,
+          "return_fraction": 0.051999092279693966,
+          "slippage_usd": 12.311701690025098,
+          "winner_removal_method": "attribution subtraction; no path resimulation"
+        }
+      },
+      "validation": {
+        "buy_hold/base": {
+          "closed_round_trips": 2,
+          "fees_usd": 31.08788705666836,
+          "max_drawdown_fraction": 0.34106446313958905,
+          "net_pnl_usd": 3162.155051811518,
+          "pnl_less_largest_winning_trade_usd": 875.1539689958431,
+          "return_fraction": 3.162155051811518,
+          "slippage_usd": 2.5914562133211336,
+          "winner_removal_method": "attribution subtraction; no path resimulation"
+        },
+        "buy_hold/double_cost": {
+          "closed_round_trips": 2,
+          "fees_usd": 61.75721854327375,
+          "max_drawdown_fraction": 0.34106446313958905,
+          "net_pnl_usd": 3108.393075082635,
+          "pnl_less_largest_winning_trade_usd": 857.3912968321501,
+          "return_fraction": 3.1083930750826347,
+          "slippage_usd": 5.149610178509951,
+          "winner_removal_method": "attribution subtraction; no path resimulation"
+        },
+        "buy_hold/extra_day_delay": {
+          "closed_round_trips": 2,
+          "fees_usd": 31.08788705666836,
+          "max_drawdown_fraction": 0.34106446313958905,
+          "net_pnl_usd": 3162.155051811518,
+          "pnl_less_largest_winning_trade_usd": 875.1539689958431,
+          "return_fraction": 3.162155051811518,
+          "slippage_usd": 2.5914562133211336,
+          "winner_removal_method": "attribution subtraction; no path resimulation"
+        },
+        "cash": {
+          "max_drawdown_fraction": 0,
+          "net_pnl_usd": 0,
+          "return_fraction": 0
+        },
+        "sma_180/base": {
+          "closed_round_trips": 14,
+          "fees_usd": 147.97418398573774,
+          "max_drawdown_fraction": 0.33422277633871833,
+          "net_pnl_usd": 1266.4801424422026,
+          "pnl_less_largest_winning_trade_usd": 672.7367630289338,
+          "return_fraction": 1.2664801424422025,
+          "slippage_usd": 12.331538695277759,
+          "winner_removal_method": "attribution subtraction; no path resimulation"
+        },
+        "sma_180/double_cost": {
+          "closed_round_trips": 14,
+          "fees_usd": 281.1297283289768,
+          "max_drawdown_fraction": 0.36443822473886134,
+          "net_pnl_usd": 1061.4818290649018,
+          "pnl_less_largest_winning_trade_usd": 490.7998768028398,
+          "return_fraction": 1.0614818290649017,
+          "slippage_usd": 23.428843401148868,
+          "winner_removal_method": "attribution subtraction; no path resimulation"
+        },
+        "sma_180/extra_day_delay": {
+          "closed_round_trips": 14,
+          "fees_usd": 147.1799007724559,
+          "max_drawdown_fraction": 0.35340408426718506,
+          "net_pnl_usd": 1165.6547689859299,
+          "pnl_less_largest_winning_trade_usd": 530.6049782825643,
+          "return_fraction": 1.1656547689859298,
+          "slippage_usd": 12.265323006036184,
+          "winner_removal_method": "attribution subtraction; no path resimulation"
+        },
+        "sma_90/base": {
+          "closed_round_trips": 40,
+          "fees_usd": 305.91641153273076,
+          "max_drawdown_fraction": 0.5007586782301527,
+          "net_pnl_usd": 423.0401293524483,
+          "pnl_less_largest_winning_trade_usd": 49.17540719562237,
+          "return_fraction": 0.4230401293524483,
+          "slippage_usd": 25.49322290683518,
+          "winner_removal_method": "attribution subtraction; no path resimulation"
+        },
+        "sma_90/double_cost": {
+          "closed_round_trips": 40,
+          "fees_usd": 536.395557193204,
+          "max_drawdown_fraction": 0.5600945186194852,
+          "net_pnl_usd": 105.14864201458204,
+          "pnl_less_largest_winning_trade_usd": -213.21528398000225,
+          "return_fraction": 0.10514864201458204,
+          "slippage_usd": 44.70031601061554,
+          "winner_removal_method": "attribution subtraction; no path resimulation"
+        },
+        "sma_90/extra_day_delay": {
+          "closed_round_trips": 40,
+          "fees_usd": 293.2412431305145,
+          "max_drawdown_fraction": 0.5159536018053166,
+          "net_pnl_usd": 310.72761980158,
+          "pnl_less_largest_winning_trade_usd": -41.15407585737171,
+          "return_fraction": 0.31072761980158,
+          "slippage_usd": 24.43692736232378,
+          "winner_removal_method": "attribution subtraction; no path resimulation"
+        }
+      }
+    }
+  },
+  "stale": false,
+  "status": "observing"
+}
