@@ -43,4 +43,4 @@ include = ["app*"]
 version = {attr = "app.version.APP_VERSION"}
 
 [tool.setuptools.package-data]
-app = ["trend_protocol.json"]
+app = ["trend_protocol.json", "carry_protocol.json"]

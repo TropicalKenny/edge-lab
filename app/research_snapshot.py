@@ -9,7 +9,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.cost_audit import study_cost_audit
-from app.trend_snapshot import trend_snapshot
+from app.trend_snapshot import carry_snapshot, trend_snapshot
 from app.config import Settings, get_settings
 from app.dashboard_api import dashboard_summary
 from app.database import get_session_factory
@@ -228,6 +228,7 @@ def build_research_snapshot(
         "schema": SNAPSHOT_SCHEMA,
         "captured_at": captured_at,
         "trend_research": trend_snapshot(captured_at),
+        "carry_shadow": carry_snapshot(captured_at),
         "mode": "paper-shadow-research-only",
         "safety": {
             "can_trade_live": False,

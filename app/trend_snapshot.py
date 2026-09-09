@@ -23,3 +23,14 @@ def trend_snapshot(now=None, path=Path("/data/trend/summary.json")):
         return {"status": "not_available_in_this_reader", "can_trade_live": False}
     except (ValueError, KeyError, TypeError, OSError):
         return {"status": "invalid_summary", "can_trade_live": False}
+
+
+def carry_snapshot(now=None):
+    value = trend_snapshot(now, Path("/data/carry/summary.json"))
+    if value.get("checked_at"):
+        age = (
+            (now or datetime.now(UTC)) - datetime.fromisoformat(value["checked_at"])
+        ).total_seconds()
+        if not 0 <= age < 180:
+            value.update(status="stale", stale=True)
+    return value

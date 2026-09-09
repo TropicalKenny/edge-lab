@@ -1,0 +1,22 @@
+{
+  "version": "m6o-btc-ubtc-carry-v1",
+  "registered_utc": "2026-09-09",
+  "perp": "BTC",
+  "spot_base": "UBTC",
+  "spot_quote": "USDC",
+  "horizons_hours": [336, 168],
+  "capital_per_book_usd": 1000,
+  "notional_fraction": 0.4,
+  "spot_fee_bps": 7,
+  "perp_fee_bps": 4.5,
+  "adverse_bps_per_leg": 2,
+  "minimum_edge_bps": 10,
+  "maximum_entry_basis_bps": 50,
+  "stop_loss_fraction_of_book": 0.02,
+  "margin_exit_ratio": 0.3,
+  "max_oracle_age_seconds": 120,
+  "max_monitoring_gap_seconds": 180,
+  "mode": "conditional_quote_shadow_not_execution",
+  "live_trading": false,
+  "automatic_promotion": false
+}
