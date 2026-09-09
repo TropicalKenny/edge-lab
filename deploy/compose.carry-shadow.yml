@@ -1,0 +1,26 @@
+services:
+  carry-shadow:
+    profiles: ["carry-shadow"]
+    build: .
+    command: ["python", "-m", "app.workers.carry_shadow"]
+    environment:
+      SIGNER_ENABLED: "false"
+      CARRY_RESEARCH_DIR: /data/carry
+    volumes:
+      - carry-shadow:/data/carry
+    ports: []
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import json,time,datetime; p=json.load(open('/data/carry/summary.json')); assert p['status']=='running'; assert 0 <= time.time()-datetime.datetime.fromisoformat(p['checked_at']).timestamp() < 180"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 120s
+  dashboard:
+    volumes:
+      - carry-shadow:/data/carry:ro
+volumes:
+  carry-shadow:
+    name: edge-lab-carry-shadow-v1
