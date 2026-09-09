@@ -48,8 +48,12 @@ def save_funding(db, rows):
             if row["coin"] != "BTC":
                 raise ValueError("funding asset mismatch")
             stamp = int(row["time"])
-            if stamp % HOUR:
-                raise ValueError("funding hour misaligned")
+            bucket = stamp // HOUR * HOUR
+            same_hour = db.execute(
+                "SELECT time FROM funding WHERE time>=? AND time<?", (bucket, bucket + HOUR)
+            ).fetchone()
+            if same_hour and same_hour[0] != stamp:
+                raise ValueError("conflicting funding records in one hour")
             rate = finite(row["fundingRate"])
             if abs(rate) > 0.04:
                 raise ValueError("funding outside documented cap")
@@ -60,11 +64,21 @@ def save_funding(db, rows):
 
 
 def rates_between(db, start, end):
-    expected = list(range((start // HOUR + 1) * HOUR, end // HOUR * HOUR + 1, HOUR))
+    expected = set(range((start // HOUR + 1) * HOUR, end // HOUR * HOUR + 1, HOUR))
     rows = db.execute(
         "SELECT time,rate FROM funding WHERE time>? AND time<=? ORDER BY time", (start, end)
     ).fetchall()
-    if [r[0] for r in rows] != expected:
+    # Preserve actual payment timestamps: an entry just before a payment in the
+    # same hour earns it; an exit before a known later payment does not.
+    if rows and rows[0][0] // HOUR == start // HOUR:
+        expected.add(start // HOUR * HOUR)
+    last_bucket = end // HOUR * HOUR
+    known_last = db.execute(
+        "SELECT time FROM funding WHERE time>=? AND time<?", (last_bucket, last_bucket + HOUR)
+    ).fetchone()
+    if known_last and known_last[0] > end:
+        expected.discard(last_bucket)
+    if [r[0] // HOUR * HOUR for r in rows] != sorted(expected):
         raise ValueError("missing settled funding hour")
     return rows
 
@@ -72,7 +86,13 @@ def rates_between(db, start, end):
 def forecast(db, now, horizon):
     # Five-minute publication buffer; never use the unsettled current rate.
     end = (now - 300000) // HOUR * HOUR
-    rows = rates_between(db, end - 720 * HOUR, end)
+    cutoff = now - 300000
+    rows = db.execute(
+        "SELECT time,rate FROM funding WHERE time>=? AND time<=? ORDER BY time",
+        (end - 719 * HOUR, cutoff),
+    ).fetchall()
+    if [t // HOUR * HOUR for t, _ in rows] != list(range(end - 719 * HOUR, end + 1, HOUR)):
+        raise ValueError("missing settled funding hour")
     return min(sum(r for _, r in rows[-168:]) / 168, sum(r for _, r in rows) / 720) * horizon
 
 
