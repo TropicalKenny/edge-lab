@@ -1,0 +1,26 @@
+services:
+  trend-research:
+    profiles: ["trend"]
+    build: .
+    command: ["python", "-m", "app.workers.trend_research"]
+    environment:
+      SIGNER_ENABLED: "false"
+      TREND_RESEARCH_DIR: /data/trend
+    volumes:
+      - trend-research:/data/trend
+    ports: []
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import json,time,datetime; p=json.load(open('/data/trend/summary.json')); assert p['status']=='observing'; assert 0 <= time.time()-datetime.datetime.fromisoformat(p['checked_at']).timestamp() < 900"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 180s
+  dashboard:
+    volumes:
+      - trend-research:/data/trend:ro
+volumes:
+  trend-research:
+    name: edge-lab-trend-research-v1

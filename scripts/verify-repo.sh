@@ -73,7 +73,9 @@ if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; 
     -f docker-compose.yml \
     -f deploy/compose.forward.yml \
     -f deploy/compose.dashboard-local.yml \
+    -f deploy/compose.trend.yml \
     --profile dashboard-local \
+    --profile trend \
     config >/dev/null
 else
   printf '%s\n' 'SKIP: Docker Compose unavailable; Python/migration checks passed.'

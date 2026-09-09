@@ -15,11 +15,11 @@ set +a
 [ "${SIGNER_ENABLED:-false}" = "false" ] || { echo "Refusing dashboard with SIGNER_ENABLED != false" >&2; exit 1; }
 export SIGNER_ENABLED=false
 
-ARGS="--env-file $ENV_FILE -f docker-compose.yml -f deploy/compose.forward.yml -f deploy/compose.dashboard-local.yml --profile dashboard-local"
+ARGS="--env-file $ENV_FILE -f docker-compose.yml -f deploy/compose.forward.yml -f deploy/compose.dashboard-local.yml -f deploy/compose.trend.yml --profile dashboard-local --profile trend"
 # shellcheck disable=SC2086
 docker compose $ARGS config -q
 # shellcheck disable=SC2086
-docker compose $ARGS up -d --build postgres migrate dashboard-db-role dashboard
+docker compose $ARGS up -d --build postgres migrate dashboard-db-role dashboard trend-research
 
 python3 - <<'PY'
 import json

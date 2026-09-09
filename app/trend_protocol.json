@@ -1,0 +1,21 @@
+{
+  "version": "m6n-trend-v1",
+  "registered_utc": "2026-09-09",
+  "venue": "Coinbase Exchange public market data",
+  "products": ["BTC-USD", "ETH-USD"],
+  "history_start": "2019-01-01",
+  "windows": {
+    "development": ["2020-01-01", "2023-01-01"],
+    "validation": ["2023-01-01", "2025-01-01"],
+    "holdout": ["2025-01-01", "2026-09-01"]
+  },
+  "lookbacks": [90, 180],
+  "initial_capital_usd": 1000,
+  "fee_bps_per_side": 60,
+  "slippage_bps_per_side": 5,
+  "signal_to_open_lag_days": 1,
+  "cash_interest": 0,
+  "live_trading": false,
+  "forward_mode": "signal_observation_only",
+  "promotion": "manual_research_review_only"
+}
